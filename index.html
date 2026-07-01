@@ -616,13 +616,19 @@ async function startRecording(stream,label){
     document.getElementById('recTimer').innerHTML='<span class="recdot"></span>'+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},250);
   mr.onstop=async()=>{clearInterval(timerInt);
     stream.getTracks().forEach(t=>t.stop());
+    document.getElementById('inputOverlay').classList.remove('show');
     const blob=new Blob(chunks,{type:chunks[0]?.type||'audio/webm'});
     const ab=await blob.arrayBuffer();
     const audioId=uid();await dbPut('audio',{id:audioId,data:ab});
     await assignPad(pendingIdx,audioId,label==='시스템 오디오 녹음'?'녹음음원':'녹음');
   };
   mr.start();
-  document.getElementById('recStop').onclick=()=>mr.stop();
+  document.getElementById('recStop').onclick=function(){
+    if(mr.state==='inactive')return;
+    this.disabled=true;this.textContent='저장 중…';this.style.opacity='.6';
+    clearInterval(timerInt);
+    mr.stop();
+  };
 }
 async function recordSystem(){
   try{
@@ -661,6 +667,8 @@ function fmtDur(sec){
 let editIdx=null;
 function openPadEditor(idx,isNew){
   editIdx=idx;const pad=activeSet().pads[idx];if(!pad)return;
+  // 녹음/입력 선택 등 다른 오버레이가 떠 있으면 먼저 닫기
+  document.getElementById('inputOverlay').classList.remove('show');
   const sheet=document.getElementById('padSheet');
   sheet.innerHTML=`
     <h2>${isNew?'음원 설정':'패드 편집'}</h2><p class="sub">패드 ${idx+1}번</p>
