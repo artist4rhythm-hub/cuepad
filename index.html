@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0c10">
+<title>영어 발표회 BGM 플레이어</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BGM 플레이어">
+<style>
+  :root{
+    --bg:#0a0c10; --bg2:#171b21; --panel:#222831; --panel2:#2a313c;
+    --line:#363d49; --line2:#454e5c;
+    --txt:#e8edf5; --txt2:#9aa6b6; --txt3:#67707e;
+    --bgm:#3b82f6; --bgm-glow:rgba(59,130,246,.55); --bgm-soft:rgba(120,170,255,.18);
+    --sfx:#f59e0b; --sfx-glow:rgba(245,158,11,.55); --sfx-soft:rgba(255,200,120,.18);
+    --danger:#ef4444; --ok:#22c55e; --warn:#f59e0b;
+    --metal:linear-gradient(160deg,#2a2f38 0%,#1a1e25 45%,#22272f 100%);
+    --metal-bar:linear-gradient(180deg,#262b33 0%,#1b2027 100%);
+    --emboss:0 1px 0 rgba(255,255,255,.07);
+    --radius:13px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;color:var(--txt);font-family:var(--font);overscroll-behavior:none;
+    background:#0a0c10;
+    background-image:radial-gradient(ellipse at 50% -10%,#161b22 0%,#0a0c10 60%);}
+  body{display:flex;flex-direction:column;user-select:none;}
+  button{font-family:inherit;cursor:pointer;color:inherit;}
+
+  /* ===== 상단 바 ===== */
+  .topbar{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--metal-bar);
+    border-bottom:1px solid #0d1015;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 2px 6px rgba(0,0,0,.4);flex-shrink:0;}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14.5px;letter-spacing:.2px;color:#aeb9c8;text-shadow:var(--emboss);white-space:nowrap;}
+  .brand .logo-img{width:28px;height:28px;border-radius:8px;object-fit:cover;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 5px rgba(0,0,0,.5);flex-shrink:0;}
+  .set-select{flex:1;min-width:0;display:flex;align-items:center;gap:6px;}
+  select.set{flex:1;min-width:0;background:var(--panel);border:1px solid #0d1015;color:var(--txt);border-radius:9px;padding:8px 10px;font-size:14px;font-weight:600;max-width:240px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 -2px 4px rgba(0,0,0,.3);}
+  .iconbtn{width:38px;height:38px;flex-shrink:0;border:1px solid #0d1015;background:linear-gradient(180deg,#2b313b,#212630);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;transition:.12s;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 2px 4px rgba(0,0,0,.4);color:#c4cdd9;}
+  .iconbtn:hover{background:linear-gradient(180deg,#323945,#272d38);}
+  .iconbtn:active{transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.5);}
+  .iconbtn.on{background:linear-gradient(180deg,#4a90f0,#2f6fd0);border-color:#1d4ea0;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 0 12px var(--bgm-glow);}
+
+  /* ===== BGM 상태바 ===== */
+  .bgmbar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--metal-bar);border-bottom:1px solid #0d1015;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 5px rgba(0,0,0,.35);flex-shrink:0;min-height:48px;}
+  .bgmbar .dot{width:9px;height:9px;border-radius:50%;background:var(--txt3);flex-shrink:0;box-shadow:inset 0 1px 1px rgba(0,0,0,.5);}
+  .bgmbar.playing .dot{background:var(--bgm);box-shadow:0 0 10px var(--bgm-glow);animation:pulse 1.6s infinite;}
+  @keyframes pulse{50%{opacity:.4;}}
+  .bgmbar .now{flex:1;min-width:0;font-size:13px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bgmbar .now b{color:var(--txt);font-weight:600;}
+  .bgmbar input[type=range]{width:90px;}
+  .bgmbar .stopbgm{font-size:12px;padding:6px 11px;border:1px solid #0d1015;background:linear-gradient(180deg,#2b313b,#212630);border-radius:8px;color:var(--txt2);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 3px rgba(0,0,0,.4);}
+  .bgmbar .stopbgm:active{transform:translateY(1px);box-shadow:inset 0 2px 4px rgba(0,0,0,.5);}
+
+  /* ===== 패드 그리드 (메탈 콘솔) ===== */
+  .grid-wrap{flex:1;overflow-y:auto;padding:16px 14px 18px;}
+  .grid{display:grid;gap:13px;grid-template-columns:repeat(var(--cols,3),1fr);max-width:760px;margin:0 auto;
+    background:var(--metal);border-radius:18px;padding:16px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 8px rgba(0,0,0,.5),0 8px 28px rgba(0,0,0,.55);}
+  .pad{position:relative;aspect-ratio:1/1;border-radius:var(--radius);border:none;
+    background:linear-gradient(150deg,#2c333d 0%,#222730 60%,#1a1e25 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 -3px 7px rgba(0,0,0,.55),0 3px 7px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.04);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:10px;
+    transition:transform .08s,box-shadow .15s;overflow:hidden;text-align:center;}
+  .pad:active{transform:scale(.96);}
+  .pad .typetag{position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:800;letter-spacing:.5px;padding:2px 6px;border-radius:5px;text-transform:uppercase;z-index:2;text-shadow:0 1px 0 rgba(0,0,0,.5);}
+  .pad.t-bgm .typetag{color:#6fa3e0;background:transparent;}
+  .pad.t-sfx .typetag{color:#cfa05a;background:transparent;}
+  .pad .durtag{position:absolute;bottom:8px;right:9px;font-size:10.5px;font-weight:700;color:var(--txt2);
+    background:transparent;text-shadow:0 1px 0 rgba(0,0,0,.5);padding:0;z-index:2;font-variant-numeric:tabular-nums;}
+  .pad .padicon{font-size:calc(30px * var(--fs,1) * var(--basefont,1));line-height:1;opacity:.95;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
+  .pad .padname{font-size:calc(13.5px * var(--fs,1) * var(--basefont,1));font-weight:700;line-height:1.25;color:var(--txt);max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;z-index:2;text-shadow:0 1px 1px rgba(0,0,0,.6);}
+  .pad.t-bgm{background:linear-gradient(150deg,#243246 0%,#1a2333 60%,#131b28 100%);box-shadow:inset 0 1px 0 rgba(150,190,255,.22),inset 0 -3px 7px rgba(0,0,0,.55),0 3px 7px rgba(0,0,0,.45),0 0 0 1px rgba(120,170,255,.12);}
+  .pad.t-sfx{background:linear-gradient(150deg,#3a3520 0%,#2a2615 60%,#1f1c10 100%);box-shadow:inset 0 1px 0 rgba(255,220,150,.22),inset 0 -3px 7px rgba(0,0,0,.55),0 3px 7px rgba(0,0,0,.45),0 0 0 1px rgba(255,200,120,.12);}
+  .pad .empty-hint{font-size:12px;color:var(--txt3);}
+  .pad.empty{background:linear-gradient(150deg,#1c2027,#15181e);box-shadow:inset 0 2px 6px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04);}
+  .pad.empty .padicon{opacity:.35;font-size:24px;filter:none;}
+  .pad.playing.t-bgm{box-shadow:inset 0 1px 0 rgba(150,190,255,.22),0 0 0 2px var(--bgm),0 0 24px var(--bgm-glow);}
+  .pad.playing.t-sfx{box-shadow:inset 0 1px 0 rgba(255,220,150,.22),0 0 0 2px var(--sfx),0 0 24px var(--sfx-glow);}
+  .pad.pressing{transform:scale(.94) translateY(1px);filter:brightness(1.3);box-shadow:inset 0 2px 8px rgba(0,0,0,.6);}
+  /* 탭 리플 */
+  .pad .ripple{position:absolute;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.55);
+    transform:translate(-50%,-50%) scale(0);pointer-events:none;opacity:0;z-index:1;}
+  .pad.t-sfx .ripple{background:rgba(255,206,122,.6);}
+  .pad.t-bgm .ripple{background:rgba(147,192,255,.6);}
+  .pad .ripple.go{animation:ripple .55s ease-out;}
+  @keyframes ripple{0%{transform:translate(-50%,-50%) scale(0);opacity:.7;}100%{transform:translate(-50%,-50%) scale(34);opacity:0;}}
+  /* 재생 시 번쩍 */
+  .pad.playing{animation:padflash .35s ease;}
+  @keyframes padflash{0%{filter:brightness(1.7);}100%{filter:brightness(1);}}
+  .pad .progress{position:absolute;left:0;bottom:0;height:3px;width:0;background:currentColor;}
+  .pad.t-bgm .progress{color:var(--bgm);}
+  .pad.t-sfx .progress{color:var(--sfx);}
+  .pad .editdot{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:7px;background:rgba(0,0,0,.35);
+    display:none;align-items:center;justify-content:center;font-size:13px;color:#c4cdd9;border:1px solid #0d1015;box-shadow:0 1px 3px rgba(0,0,0,.5);}
+  .editmode .pad .editdot{display:flex;}
+  .editmode .pad{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 1.5px var(--bgm),0 0 14px var(--bgm-soft);animation:editpulse 1.4s ease-in-out infinite;}
+  @keyframes editpulse{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 1.5px var(--bgm),0 0 20px var(--bgm-glow);}}
+
+  /* ===== 하단 바 ===== */
+  .bottombar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--metal-bar);border-top:1px solid #0d1015;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 -2px 6px rgba(0,0,0,.4);flex-shrink:0;}
+  .bottombar .master{flex:1;display:flex;align-items:center;gap:9px;font-size:12px;color:var(--txt2);}
+  .bottombar input[type=range]{flex:1;}
+  .panic{padding:11px 17px;border-radius:10px;background:linear-gradient(180deg,#f25555,#c93030);border:1px solid #8f1f1f;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 5px rgba(0,0,0,.5);}
+  .panic:active{transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.4);}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;height:5px;background:#12161c;border-radius:3px;outline:none;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:linear-gradient(180deg,#e8edf5,#aab4c2);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.6);}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border:none;border-radius:50%;background:linear-gradient(180deg,#e8edf5,#aab4c2);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.6);}
+
+  /* ===== 모달 ===== */
+  .overlay{position:fixed;inset:0;background:rgba(5,8,12,.72);backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center;z-index:50;}
+  .overlay.show{display:flex;}
+  @media(min-width:600px){.overlay{align-items:center;}}
+  .sheet{width:100%;max-width:480px;max-height:90vh;overflow-y:auto;background:var(--metal);border:1px solid #0d1015;
+    border-radius:18px 18px 0 0;padding:20px;animation:up .25s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 -8px 30px rgba(0,0,0,.5);}
+  @media(min-width:600px){.sheet{border-radius:18px;}}
+  @keyframes up{from{transform:translateY(30px);opacity:0;}}
+  .sheet h2{margin:0 0 4px;font-size:18px;text-shadow:var(--emboss);}
+  .sheet .sub{margin:0 0 18px;font-size:13px;color:var(--txt2);}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--txt2);margin-bottom:6px;font-weight:600;}
+  .field input[type=text],.field select{width:100%;background:#12161c;border:1px solid #0d1015;color:var(--txt);border-radius:10px;padding:11px 12px;font-size:15px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .row{display:flex;gap:10px;}.row>*{flex:1;}
+  .btn{width:100%;padding:13px;border-radius:11px;border:1px solid #1d4ea0;font-size:15px;font-weight:700;background:linear-gradient(180deg,#4a90f0,#2f6fd0);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 5px rgba(0,0,0,.45);}
+  .btn:active{transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.4);}
+  .btn.ghost{background:linear-gradient(180deg,#2b313b,#212630);border:1px solid #0d1015;color:var(--txt);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 2px 4px rgba(0,0,0,.4);}
+  .btn.danger{background:linear-gradient(180deg,#f25555,#c93030);border-color:#8f1f1f;}
+  .btn.sfx{background:linear-gradient(180deg,#f6b53e,#d8881a);border-color:#9a6010;color:#241704;}
+  .btn.sm{padding:10px;font-size:13px;}
+
+  /* 입력방식 카드 */
+  .inputcard{border:1px solid #0d1015;background:linear-gradient(180deg,#262c35,#1e232b);border-radius:12px;padding:14px;margin-bottom:10px;transition:.12s;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 5px rgba(0,0,0,.35);}
+  .inputcard.tappable:active{transform:translateY(1px);}
+  .inputcard.disabled{opacity:.5;}
+  .inputcard .ic-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .inputcard .ic-icon{font-size:22px;}
+  .inputcard .ic-title{font-weight:700;font-size:15px;flex:1;}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;}
+  .badge.ok{background:rgba(34,197,94,.16);color:#7ee2a0;}
+  .badge.warn{background:rgba(245,158,11,.16);color:#ffce7a;}
+  .badge.no{background:rgba(239,68,68,.16);color:#ff9b9b;}
+  .inputcard .ic-desc{font-size:12.5px;color:var(--txt2);line-height:1.55;margin:0;}
+
+  .seg{display:flex;background:#12161c;border:1px solid #0d1015;border-radius:10px;padding:3px;gap:3px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .seg button{flex:1;padding:9px;border:none;background:transparent;border-radius:7px;font-size:13px;font-weight:600;color:var(--txt2);}
+  .seg button.active{background:linear-gradient(180deg,#4a90f0,#2f6fd0);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 3px rgba(0,0,0,.4);}
+  .seg.sfx button.active{background:var(--sfx);color:#1a1206;}
+
+  .swatches{display:flex;gap:8px;flex-wrap:wrap;}
+  .swatch{width:34px;height:34px;border-radius:9px;border:2px solid transparent;cursor:pointer;}
+  .swatch.sel{border-color:#fff;}
+
+  .iconpick{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .iconpick button{aspect-ratio:1;border:1px solid var(--line);background:var(--panel);border-radius:8px;font-size:18px;}
+  .iconpick button.sel{border-color:var(--bgm);background:var(--panel2);}
+
+  .recbox{text-align:center;padding:18px;background:var(--panel);border-radius:12px;margin-bottom:12px;}
+  .recbox .timer{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px;}
+  .recbox .recdot{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:middle;animation:pulse 1s infinite;}
+  .recbox .hint{font-size:12px;color:var(--txt2);margin-top:6px;}
+
+  .toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--metal);border:1px solid #0d1015;
+    color:var(--txt);padding:11px 18px;border-radius:11px;font-size:13.5px;z-index:80;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 8px 24px rgba(0,0,0,.5);}
+  .toast.show{opacity:1;bottom:96px;}
+
+  .hidden{display:none!important;}
+  .menu-item{display:flex;align-items:center;gap:12px;padding:14px 4px;font-size:15px;border-bottom:1px solid rgba(255,255,255,.06);}
+  .menu-item:last-child{border-bottom:none;}
+  .menu-item .mi-icon{font-size:19px;width:24px;text-align:center;}
+  .menu-item .mi-sub{font-size:12px;color:var(--txt3);margin-top:2px;}
+  .menu-item:active{opacity:.6;}
+  .empty-state{text-align:center;padding:40px 20px;color:var(--txt3);}
+  .empty-state .es-icon{font-size:40px;opacity:.5;margin-bottom:10px;}
+
+  /* ===== 시작 화면 ===== */
+  .welcome{position:fixed;inset:0;z-index:100;background:var(--bg);overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;}
+  .welcome.hide{display:none;}
+  .welcome-inner{width:100%;max-width:440px;padding:38px 24px 40px;text-align:center;}
+  .w-logo{width:74px;height:74px;border-radius:20px;margin:0 auto 16px;
+    background:linear-gradient(135deg,var(--bgm),var(--sfx));display:flex;align-items:center;justify-content:center;font-size:38px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 34px rgba(59,130,246,.3),0 3px 8px rgba(0,0,0,.5);}
+  .w-logo-img{width:128px;height:128px;border-radius:26px;margin:0 auto 16px;display:block;object-fit:cover;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 12px 36px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06);}
+  .w-title{margin:0;font-size:25px;font-weight:800;letter-spacing:.5px;color:#cdd6e2;text-shadow:var(--emboss);line-height:1.3;}
+  .w-tag{margin:6px 0 26px;font-size:14px;color:var(--txt2);}
+  .w-feats{display:flex;flex-direction:column;gap:13px;text-align:left;margin-bottom:26px;}
+  .w-feat{display:flex;gap:13px;align-items:flex-start;background:linear-gradient(180deg,#262c35,#1e232b);border:1px solid #0d1015;border-radius:13px;padding:13px 15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 5px rgba(0,0,0,.35);}
+  .w-feat .wf-ic{font-size:22px;flex-shrink:0;line-height:1.3;}
+  .w-feat b{display:block;font-size:14.5px;margin-bottom:3px;}
+  .w-feat span{display:block;font-size:12.5px;color:var(--txt2);line-height:1.5;}
+
+  .w-install{margin-bottom:14px;}
+  .w-install-card{background:var(--metal);border:1px solid #0d1015;border-radius:14px;padding:18px;text-align:left;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 4px 12px rgba(0,0,0,.45);}
+  .w-install-card .wi-head{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;margin-bottom:12px;}
+  .w-install-card .wi-head .wi-badge{margin-left:auto;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(59,130,246,.16);color:#93c0ff;}
+  .w-btn-install{width:100%;padding:14px;border:1px solid #1d4ea0;border-radius:12px;font-size:15.5px;font-weight:700;
+    background:linear-gradient(180deg,#4a90f0,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 6px rgba(0,0,0,.45);}
+  .w-btn-install:active{transform:translateY(1px);}
+  .wi-steps{margin:0;padding:0;list-style:none;counter-reset:s;}
+  .wi-steps li{position:relative;padding:9px 0 9px 38px;font-size:13.5px;color:var(--txt);border-bottom:1px solid rgba(255,255,255,.06);line-height:1.5;}
+  .wi-steps li:last-child{border-bottom:none;}
+  .wi-steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:8px;
+    width:25px;height:25px;border-radius:50%;background:linear-gradient(180deg,#4a90f0,#2f6fd0);color:#fff;font-size:13px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 3px rgba(0,0,0,.4);}
+  .wi-steps li b{color:#fff;}
+  .wi-steps .k{display:inline-flex;align-items:center;gap:4px;background:#12161c;border:1px solid #0d1015;
+    border-radius:6px;padding:1px 7px;font-size:12.5px;font-weight:600;margin:0 1px;vertical-align:middle;box-shadow:inset 0 1px 2px rgba(0,0,0,.4);}
+  .wi-note{font-size:12px;color:var(--txt3);margin:10px 0 0;line-height:1.5;}
+  .w-done{text-align:center;padding:6px;font-size:14px;color:var(--ok);font-weight:600;}
+
+  .w-start{width:100%;margin-top:6px;padding:15px;border:1px solid #0d1015;background:linear-gradient(180deg,#2b313b,#212630);color:var(--txt);
+    border-radius:13px;font-size:16px;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 3px 7px rgba(0,0,0,.45);}
+  .w-start:active{transform:translateY(1px);}
+  .w-skip{font-size:11.5px;color:var(--txt3);margin:11px 0 0;}
+
+</style>
+</head>
+<body>
+
+<!-- ===== 시작 화면 (온보딩 + 설치 안내) ===== -->
+<div class="welcome" id="welcome">
+  <div class="welcome-inner">
+    <img class="w-logo-img" src="icon-512.png" alt="다니엘 아마츠">
+    <h1 class="w-title">영어 발표회<br>BGM 플레이어</h1>
+    <p class="w-tag">다니엘 아마츠 · 발표회와 연극을 위한 사운드 패드</p>
+
+    <div class="w-feats">
+      <div class="w-feat"><span class="wf-ic">🎛</span><div><b>탭 한 번으로 재생</b><span>옥타패드처럼 패드를 눌러 BGM과 효과음을 즉시 틀어요</span></div></div>
+      <div class="w-feat"><span class="wf-ic">🎵</span><div><b>배경음악 + 효과음 동시에</b><span>BGM을 깔아두고 그 위에 효과음을 자유롭게 겹쳐요</span></div></div>
+      <div class="w-feat"><span class="wf-ic">📁</span><div><b>내 음원을 그대로</b><span>파일·시스템 녹음·마이크로 원하는 소리를 패드에 저장</span></div></div>
+      <div class="w-feat"><span class="wf-ic">📡</span><div><b>오프라인에서 작동</b><span>한번 설치하면 와이파이 없는 공연장에서도 안전하게</span></div></div>
+    </div>
+
+    <!-- 설치 영역: 기기 감지해서 내용이 바뀜 -->
+    <div class="w-install" id="wInstall"></div>
+
+    <button class="w-start" id="wStart">바로 시작하기 →</button>
+    <p class="w-skip">설치는 나중에 메뉴에서도 할 수 있어요</p>
+  </div>
+</div>
+
+
+<div class="topbar">
+  <div class="brand"><img class="logo-img" src="icon-192.png" alt=""><span>BGM 플레이어</span></div>
+  <div class="set-select">
+    <select class="set" id="setSelect"></select>
+    <button class="iconbtn" id="setMenuBtn" title="세트 메뉴">⋯</button>
+  </div>
+  <button class="iconbtn" id="editBtn" title="편집 모드">✎</button>
+  <button class="iconbtn" id="appMenuBtn" title="메뉴">☰</button>
+</div>
+
+<div class="bgmbar" id="bgmBar">
+  <span class="dot"></span>
+  <span class="now" id="bgmNow">재생 중인 배경음악 없음</span>
+  <input type="range" id="bgmVol" min="0" max="100" value="80" title="BGM 볼륨">
+  <button class="stopbgm" id="bgmStop">정지</button>
+</div>
+
+<div class="grid-wrap">
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="bottombar">
+  <div class="master">
+    <span>전체 볼륨</span>
+    <input type="range" id="masterVol" min="0" max="100" value="100">
+  </div>
+  <button class="panic" id="panicBtn">■ 전체 정지</button>
+</div>
+
+<!-- 메뉴 시트 -->
+<div class="overlay" id="appMenuOverlay">
+  <div class="sheet">
+    <h2>메뉴</h2>
+    <p class="sub">세트와 음원을 관리합니다</p>
+    <div class="menu-item" data-act="add-set"><span class="mi-icon">＋</span><div><div>새 세트 만들기</div><div class="mi-sub">패드 구성 한 벌을 새로 추가</div></div></div>
+    <div class="menu-item" data-act="rename-set"><span class="mi-icon">✎</span><div><div>현재 세트 이름 바꾸기</div></div></div>
+    <div class="menu-item" data-act="grid-size"><span class="mi-icon">▦</span><div><div>패드 배치 바꾸기</div><div class="mi-sub">열 개수와 패드 수 조절</div></div></div>
+    <div class="menu-item" data-act="font-size"><span class="mi-icon">🔠</span><div><div>전체 글자 크기</div><div class="mi-sub">모든 패드 글자를 한번에 조절</div></div></div>
+    <div class="menu-item" data-act="export"><span class="mi-icon">⤓</span><div><div>세트 파일로 내보내기</div><div class="mi-sub">음원까지 묶어 백업 (.json)</div></div></div>
+    <div class="menu-item" data-act="import"><span class="mi-icon">⤒</span><div><div>세트 파일 불러오기</div><div class="mi-sub">백업한 파일에서 복원</div></div></div>
+    <div class="menu-item" data-act="install"><span class="mi-icon">📲</span><div><div>홈 화면에 설치</div><div class="mi-sub">앱처럼 설치하는 방법 안내</div></div></div>
+    <div class="menu-item" data-act="del-set"><span class="mi-icon" style="color:var(--danger)">🗑</span><div><div style="color:var(--danger)">현재 세트 삭제</div></div></div>
+    <button class="btn ghost" style="margin-top:14px" data-close>닫기</button>
+  </div>
+</div>
+
+<!-- 패드 편집 시트 -->
+<div class="overlay" id="padOverlay">
+  <div class="sheet" id="padSheet"></div>
+</div>
+
+<!-- 입력 방식 선택 시트 -->
+<div class="overlay" id="inputOverlay">
+  <div class="sheet" id="inputSheet"></div>
+</div>
+
+<!-- 그리드 크기 시트 -->
+<div class="overlay" id="gridOverlay">
+  <div class="sheet">
+    <h2>패드 배치</h2>
+    <p class="sub">열 개수와 전체 패드 수를 정하세요</p>
+    <div class="field"><label>열 개수 (가로)</label>
+      <div class="seg" id="colSeg">
+        <button data-c="2">2열</button><button data-c="3">3열</button><button data-c="4">4열</button>
+      </div></div>
+    <div class="field"><label>전체 패드 수</label>
+      <div class="seg" id="countSeg">
+        <button data-n="6">6</button><button data-n="9">9</button><button data-n="12">12</button><button data-n="16">16</button>
+      </div></div>
+    <button class="btn" id="gridApply">적용</button>
+    <button class="btn ghost sm" style="margin-top:8px" data-close>취소</button>
+  </div>
+</div>
+
+<!-- 전체 글자 크기 시트 -->
+<div class="overlay" id="fontOverlay">
+  <div class="sheet">
+    <h2>전체 글자 크기</h2>
+    <p class="sub">모든 패드의 글자 크기를 한번에 조절합니다 (개별 조절은 패드 편집에서)</p>
+    <div class="field"><label>크기 <span id="gFontVal"></span></label>
+      <input type="range" id="gFont" min="70" max="150" step="5" value="100" style="width:100%"></div>
+    <button class="btn" id="gFontApply">적용</button>
+    <button class="btn ghost sm" style="margin-top:8px" data-close>취소</button>
+  </div>
+</div>
+
+<input type="file" id="filePicker" accept="audio/*" class="hidden">
+<input type="file" id="setImporter" accept="application/json,.json" class="hidden">
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= 데이터 계층 (IndexedDB) ================= */
+const DB_NAME='cuepad-db', DB_VER=1;
+let db;
+function openDB(){return new Promise((res,rej)=>{
+  const r=indexedDB.open(DB_NAME,DB_VER);
+  r.onupgradeneeded=e=>{const d=e.target.result;
+    if(!d.objectStoreNames.contains('sets'))d.createObjectStore('sets',{keyPath:'id'});
+    if(!d.objectStoreNames.contains('audio'))d.createObjectStore('audio',{keyPath:'id'});
+    if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'k'});
+  };
+  r.onsuccess=e=>{db=e.target.result;res();};
+  r.onerror=e=>rej(e);
+});}
+function tx(store,mode='readonly'){return db.transaction(store,mode).objectStore(store);}
+function dbGet(store,key){return new Promise((res,rej)=>{const r=tx(store).get(key);r.onsuccess=()=>res(r.result);r.onerror=rej;});}
+function dbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=rej;});}
+function dbDel(store,key){return new Promise((res,rej)=>{const r=tx(store,'readwrite').delete(key);r.onsuccess=()=>res();r.onerror=rej;});}
+function dbAll(store){return new Promise((res,rej)=>{const r=tx(store).getAll();r.onsuccess=()=>res(r.result);r.onerror=rej;});}
+async function metaGet(k,def){const m=await dbGet('meta',k);return m?m.v:def;}
+async function metaSet(k,v){await dbPut('meta',{k,v});}
+
+/* ================= 오디오 엔진 ================= */
+const AudioCtx=window.AudioContext||window.webkitAudioContext;
+let ac=new AudioCtx();
+let masterGain=ac.createGain();masterGain.connect(ac.destination);
+let bgmGain=ac.createGain();bgmGain.connect(masterGain);
+const bufferCache={};            // audioId -> AudioBuffer
+let currentBGM=null;             // {padId, src, gain, name}
+const activeSFX=new Set();       // 동시 재생 효과음 추적
+
+async function ensureCtx(){if(ac.state==='suspended')await ac.resume();}
+async function getBuffer(audioId){
+  if(bufferCache[audioId])return bufferCache[audioId];
+  const rec=await dbGet('audio',audioId);
+  if(!rec)return null;
+  const buf=await ac.decodeAudioData(rec.data.slice(0));
+  bufferCache[audioId]=buf;return buf;
+}
+function setMaster(v){masterGain.gain.value=v;}
+function setBgmVol(v){bgmGain.gain.value=v;}
+
+async function playPad(pad,padEl){
+  await ensureCtx();
+  const buf=await getBuffer(pad.audioId);
+  if(buf&&(!pad.dur||pad.dur===0)){pad.dur=buf.duration;saveSet();}
+  if(!buf){toast('음원을 찾을 수 없습니다');return;}
+  if(pad.type==='bgm'){
+    // 한 번에 하나, 크로스페이드
+    if(currentBGM&&currentBGM.padId===pad.id){stopBGM();return;}
+    const fade=(pad.fade||1);
+    if(currentBGM)stopBGM(fade);
+    const src=ac.createBufferSource();src.buffer=buf;src.loop=pad.loop!==false;
+    const g=ac.createGain();g.gain.value=0;
+    src.connect(g);g.connect(bgmGain);
+    src.start();
+    g.gain.linearRampToValueAtTime(pad.vol??1,ac.currentTime+fade);
+    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fade};
+    src.onended=()=>{if(currentBGM&&currentBGM.src===src){currentBGM=null;refreshBgmBar();paintPlaying();}};
+    refreshBgmBar();paintPlaying();
+  }else{
+    // 효과음: 동시 겹침
+    if(pad.retap==='restart'){ // 같은 패드 재생 중이면 끊고 재시작
+      activeSFX.forEach(o=>{if(o.padId===pad.id){try{o.src.stop()}catch(e){}}});
+    }else if(pad.retap==='stop'){
+      let stopped=false;
+      activeSFX.forEach(o=>{if(o.padId===pad.id){try{o.src.stop()}catch(e){}stopped=true;}});
+      if(stopped)return;
+    }
+    const src=ac.createBufferSource();src.buffer=buf;
+    const g=ac.createGain();g.gain.value=pad.vol??1;
+    src.connect(g);g.connect(masterGain);
+    const obj={padId:pad.id,src};activeSFX.add(obj);
+    src.start();
+    flashPad(padEl,buf.duration);
+    src.onended=()=>{activeSFX.delete(obj);};
+  }
+}
+function stopBGM(fade){
+  if(!currentBGM)return;
+  const f=fade??currentBGM.fade??.4;const c=currentBGM;
+  c.gain.gain.cancelScheduledValues(ac.currentTime);
+  c.gain.gain.setValueAtTime(c.gain.gain.value,ac.currentTime);
+  c.gain.gain.linearRampToValueAtTime(0,ac.currentTime+f);
+  const src=c.src;setTimeout(()=>{try{src.stop()}catch(e){}},f*1000+50);
+  if(currentBGM===c)currentBGM=null;
+  refreshBgmBar();paintPlaying();
+}
+function panic(){
+  if(currentBGM){try{currentBGM.src.stop()}catch(e){}currentBGM=null;}
+  activeSFX.forEach(o=>{try{o.src.stop()}catch(e){}});activeSFX.clear();
+  refreshBgmBar();paintPlaying();
+  document.querySelectorAll('.pad .progress').forEach(p=>p.style.width='0');
+}
+function flashPad(el,dur){
+  if(!el)return;el.classList.add('playing');
+  const pr=el.querySelector('.progress');if(pr){pr.style.transition='none';pr.style.width='0';
+    requestAnimationFrame(()=>{pr.style.transition='width '+dur+'s linear';pr.style.width='100%';});}
+  setTimeout(()=>{el.classList.remove('playing');if(pr){pr.style.transition='none';pr.style.width='0';}},dur*1000);
+}
+
+/* ================= 상태 ================= */
+let state={sets:[],activeSetId:null};
+let editMode=false;
+const ICONS=['🎵','🎬','🥁','🎸','👏','🔔','🚪','⚡','🌧','💥','🐾','📢','🎺','🎻','🌊','🔥','😱','🎉','🚗','🐦','☎️','🕊','✨','🎄','💧','🎤','🎷','🎹'];
+const COLORS=['#3b82f6','#f59e0b','#22c55e','#ef4444','#a855f7','#ec4899','#14b8a6','#64748b'];
+
+function activeSet(){return state.sets.find(s=>s.id===state.activeSetId);}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+
+async function loadAll(){
+  state.sets=await dbAll('sets');
+  state.activeSetId=await metaGet('activeSet',null);
+  if(state.sets.length===0){
+    const s=newSetObj('기본 세트');state.sets.push(s);await dbPut('sets',s);
+    state.activeSetId=s.id;await metaSet('activeSet',s.id);
+  }
+  if(!activeSet())state.activeSetId=state.sets[0].id;
+}
+function newSetObj(name){
+  return {id:uid(),name,cols:3,count:9,pads:Array.from({length:9},()=>null)};
+}
+async function saveSet(){const s=activeSet();if(s)await dbPut('sets',s);}
+
+/* ================= 렌더링 ================= */
+function render(){renderSetSelect();renderGrid();refreshBgmBar();}
+function renderSetSelect(){
+  const sel=document.getElementById('setSelect');sel.innerHTML='';
+  state.sets.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;
+    if(s.id===state.activeSetId)o.selected=true;sel.appendChild(o);});
+}
+function renderGrid(){
+  const s=activeSet();const grid=document.getElementById('grid');
+  grid.style.setProperty('--cols',s.cols);
+  grid.style.setProperty('--basefont',(s.fontScale||1));
+  grid.innerHTML='';
+  for(let i=0;i<s.count;i++){
+    const pad=s.pads[i];const el=document.createElement('div');el.className='pad';el.dataset.idx=i;
+    if(!pad){
+      el.classList.add('empty');
+      el.innerHTML='<span class="padicon">＋</span><span class="empty-hint">탭하여 음원 추가</span>';
+      el.onclick=()=>openInputChooser(i);
+    }else{
+      el.classList.add(pad.type==='bgm'?'t-bgm':'t-sfx');
+      el.style.background=shade(pad.color||(pad.type==='bgm'?'#3b82f6':'#f59e0b'));
+      el.style.setProperty('--fs',(pad.fontScale||1));
+      const durTxt=fmtDur(pad.dur);
+      el.innerHTML=`<span class="typetag">${pad.type==='bgm'?'BGM':'SFX'}</span>
+        ${durTxt?`<span class="durtag">${durTxt}</span>`:''}
+        <span class="padicon">${pad.icon||'🎵'}</span>
+        <span class="padname">${esc(pad.name)}</span>
+        <span class="progress"></span>
+        <span class="editdot">✎</span>
+        <span class="ripple"></span>`;
+      attachPadHandlers(el,pad,i);
+    }
+    grid.appendChild(el);
+  }
+  paintPlaying();
+}
+/* 탭=재생/리플, 길게누르기=편집 */
+function attachPadHandlers(el,pad,idx){
+  let pressTimer=null,longPressed=false,downXY=null;
+  const ripple=el.querySelector('.ripple');
+  function doRipple(x,y){
+    const r=el.getBoundingClientRect();
+    ripple.style.left=(x-r.left)+'px';ripple.style.top=(y-r.top)+'px';
+    ripple.classList.remove('go');void ripple.offsetWidth;ripple.classList.add('go');
+  }
+  el.addEventListener('pointerdown',e=>{
+    longPressed=false;downXY=[e.clientX,e.clientY];
+    el.classList.add('pressing');
+    pressTimer=setTimeout(()=>{longPressed=true;el.classList.remove('pressing');
+      if(navigator.vibrate)navigator.vibrate(15);openPadEditor(idx);},480);
+  });
+  function cancel(){clearTimeout(pressTimer);el.classList.remove('pressing');}
+  el.addEventListener('pointermove',e=>{if(downXY){const dx=Math.abs(e.clientX-downXY[0]),dy=Math.abs(e.clientY-downXY[1]);
+    if(dx>10||dy>10)cancel();}});
+  el.addEventListener('pointerup',e=>{
+    clearTimeout(pressTimer);el.classList.remove('pressing');
+    if(longPressed)return;
+    if(editMode){openPadEditor(idx);return;}
+    doRipple(e.clientX,e.clientY);
+    playPad(pad,el);
+  });
+  el.addEventListener('pointercancel',cancel);
+  el.addEventListener('pointerleave',cancel);
+}
+function shade(hex){ // 어두운 패널 톤으로 살짝 섞기
+  const c=hex.replace('#','');const r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);
+  const mix=(x)=>Math.round(x*0.22+27);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}
+function paintPlaying(){
+  const s=activeSet();
+  document.querySelectorAll('.pad').forEach(el=>{
+    const pad=s.pads[el.dataset.idx];if(!pad)return;
+    if(pad.type==='bgm'){el.classList.toggle('playing',currentBGM&&currentBGM.padId===pad.id);}
+  });
+}
+function refreshBgmBar(){
+  const bar=document.getElementById('bgmBar');const now=document.getElementById('bgmNow');
+  if(currentBGM){bar.classList.add('playing');now.innerHTML='<b>'+esc(currentBGM.name)+'</b> 재생 중';}
+  else{bar.classList.remove('playing');now.textContent='재생 중인 배경음악 없음';}
+}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ================= 입력 방식 선택 ================= */
+let pendingIdx=null;
+function detectSystemAudio(){
+  const ua=navigator.userAgent;
+  const isMobile=/Android|iPhone|iPad|iPod/i.test(ua);
+  const hasDisplay=!!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia);
+  const isChromium=/Chrome|Edg|Edge/i.test(ua)&&!/Firefox/i.test(ua);
+  const isSafari=/^((?!chrome|android).)*safari/i.test(ua);
+  const isFirefox=/Firefox/i.test(ua);
+  if(isMobile)return{ok:false,reason:'휴대폰·태블릿 브라우저는 시스템 오디오 캡처를 지원하지 않습니다.'};
+  if(!hasDisplay)return{ok:false,reason:'이 브라우저는 화면·오디오 캡처 기능이 없습니다.'};
+  if(isFirefox)return{ok:false,reason:'파이어폭스는 시스템 오디오 캡처를 지원하지 않습니다. 크롬·엣지를 이용하세요.'};
+  if(isSafari)return{ok:false,reason:'사파리는 시스템 오디오 캡처를 지원하지 않습니다. 크롬·엣지를 이용하세요.'};
+  if(isChromium)return{ok:true,reason:'PC 크롬·엣지에서 사용 가능합니다.'};
+  return{ok:'maybe',reason:'이 브라우저에서는 동작이 보장되지 않습니다. PC 크롬·엣지를 권장합니다.'};
+}
+function detectMic(){
+  const ok=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+  return ok?{ok:true,reason:'마이크 권한을 허용하면 사용할 수 있습니다.'}
+           :{ok:false,reason:'이 브라우저는 마이크 입력을 지원하지 않습니다.'};
+}
+function openInputChooser(idx){
+  pendingIdx=idx;
+  const sys=detectSystemAudio(),mic=detectMic();
+  const badge=(r)=>r.ok===true?'<span class="badge ok">사용 가능</span>':r.ok==='maybe'?'<span class="badge warn">제한적</span>':'<span class="badge no">사용 불가</span>';
+  document.getElementById('inputSheet').innerHTML=`
+    <h2>음원 추가</h2><p class="sub">패드 ${idx+1}번 · 입력 방식을 선택하세요</p>
+    <div class="inputcard tappable" data-m="file">
+      <div class="ic-head"><span class="ic-icon">📁</span><span class="ic-title">파일 불러오기</span><span class="badge ok">모든 기기</span></div>
+      <p class="ic-desc">mp3·wav·m4a 파일을 그대로 패드에 저장합니다. 가장 안정적이며 한번 넣으면 오프라인에서도 재생됩니다.</p>
+    </div>
+    <div class="inputcard ${sys.ok?'tappable':'disabled'}" data-m="${sys.ok?'system':''}">
+      <div class="ic-head"><span class="ic-icon">🖥</span><span class="ic-title">시스템 오디오 녹음</span>${badge(sys)}</div>
+      <p class="ic-desc">컴퓨터에서 나는 소리를 디지털로 그대로 녹음합니다. ${sys.reason}</p>
+    </div>
+    <div class="inputcard ${mic.ok?'tappable':'disabled'}" data-m="${mic.ok?'mic':''}">
+      <div class="ic-head"><span class="ic-icon">🎤</span><span class="ic-title">마이크 녹음</span>${badge(mic)}</div>
+      <p class="ic-desc">마이크로 직접 녹음합니다. 외부 스피커 소리도 딸 수 있지만 주변 소음이 섞이고 음질이 떨어질 수 있어 조용한 환경을 권장합니다. ${mic.reason}</p>
+    </div>
+    <button class="btn ghost sm" style="margin-top:6px" data-close>취소</button>`;
+  document.querySelectorAll('#inputSheet .inputcard.tappable').forEach(c=>{
+    c.onclick=()=>{const m=c.dataset.m;if(!m)return;closeOverlays();
+      if(m==='file')pickFile();
+      else if(m==='system')recordSystem();
+      else if(m==='mic')recordMic();};
+  });
+  show('inputOverlay');
+}
+
+/* ---- 파일 ---- */
+function pickFile(){const fp=document.getElementById('filePicker');fp.value='';fp.click();}
+document.getElementById('filePicker').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const ab=await f.arrayBuffer();
+  const audioId=uid();await dbPut('audio',{id:audioId,data:ab});
+  const name=f.name.replace(/\.[^.]+$/,'').slice(0,24);
+  await assignPad(pendingIdx,audioId,name);
+};
+
+/* ---- 녹음 공통 ---- */
+let recState=null;
+async function startRecording(stream,label){
+  const chunks=[];const mr=new MediaRecorder(stream);
+  mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  let t0=Date.now(),timerInt;
+  const sheet=document.getElementById('inputSheet');
+  sheet.innerHTML=`<h2>${label}</h2><p class="sub">녹음 중입니다. 끝나면 정지를 누르세요.</p>
+    <div class="recbox"><div class="timer" id="recTimer"><span class="recdot"></span>00:00</div>
+    <div class="hint">${label==='시스템 오디오 녹음'?'재생할 음원을 지금 틀어주세요':'마이크에 대고 녹음하세요'}</div></div>
+    <button class="btn danger" id="recStop">■ 녹음 정지</button>`;
+  show('inputOverlay');
+  timerInt=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);
+    document.getElementById('recTimer').innerHTML='<span class="recdot"></span>'+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},250);
+  mr.onstop=async()=>{clearInterval(timerInt);
+    stream.getTracks().forEach(t=>t.stop());
+    const blob=new Blob(chunks,{type:chunks[0]?.type||'audio/webm'});
+    const ab=await blob.arrayBuffer();
+    const audioId=uid();await dbPut('audio',{id:audioId,data:ab});
+    await assignPad(pendingIdx,audioId,label==='시스템 오디오 녹음'?'녹음음원':'녹음');
+  };
+  mr.start();
+  document.getElementById('recStop').onclick=()=>mr.stop();
+}
+async function recordSystem(){
+  try{
+    const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:{systemAudio:'include'}});
+    const tracks=stream.getAudioTracks();
+    if(!tracks.length){stream.getTracks().forEach(t=>t.stop());
+      toast('오디오가 캡처되지 않았습니다. 공유 창에서 "오디오 공유"를 체크하세요');return;}
+    // 영상 트랙은 버리고 오디오만
+    const audioOnly=new MediaStream(tracks);
+    stream.getVideoTracks().forEach(t=>t.stop());
+    await startRecording(audioOnly,'시스템 오디오 녹음');
+  }catch(e){toast('녹음이 취소되었거나 권한이 거부되었습니다');}
+}
+async function recordMic(){
+  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    await startRecording(stream,'마이크 녹음');
+  }catch(e){toast('마이크 권한이 거부되었습니다');}
+}
+
+/* ---- 패드 할당 후 편집으로 ---- */
+async function assignPad(idx,audioId,name){
+  const s=activeSet();
+  let dur=0;
+  try{const buf=await getBuffer(audioId);if(buf)dur=buf.duration;}catch(e){}
+  s.pads[idx]={id:uid(),audioId,name,type:'sfx',icon:'🎵',color:'#f59e0b',vol:1,loop:true,fade:1,retap:'overlap',dur,fontScale:1};
+  await saveSet();renderGrid();
+  openPadEditor(idx,true);
+}
+function fmtDur(sec){
+  if(!sec||!isFinite(sec))return '';
+  sec=Math.round(sec);const m=Math.floor(sec/60),s=sec%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+
+/* ================= 패드 편집기 ================= */
+let editIdx=null;
+function openPadEditor(idx,isNew){
+  editIdx=idx;const pad=activeSet().pads[idx];if(!pad)return;
+  const sheet=document.getElementById('padSheet');
+  sheet.innerHTML=`
+    <h2>${isNew?'음원 설정':'패드 편집'}</h2><p class="sub">패드 ${idx+1}번</p>
+    <div class="field"><label>이름</label><input type="text" id="pName" maxlength="24" value="${esc(pad.name)}" placeholder="예: 천둥소리"></div>
+    <div class="field"><label>종류</label>
+      <div class="seg" id="pType">
+        <button data-t="bgm">🎵 배경음악 (BGM)</button>
+        <button data-t="sfx">👏 효과음 (SFX)</button>
+      </div></div>
+    <div class="field" id="bgmOpts">
+      <label>BGM 설정 — 한 번에 하나만 재생, 누르면 페이드</label>
+      <div class="row" style="align-items:center;margin-bottom:8px">
+        <label style="flex:0 0 auto;margin:0">반복 재생</label>
+        <div class="seg" style="flex:1" id="pLoop"><button data-l="1">반복</button><button data-l="0">한 번만</button></div>
+      </div>
+      <label>페이드 시간 <span id="fadeVal"></span></label>
+      <input type="range" id="pFade" min="0" max="4" step="0.5" value="${pad.fade??1}" style="width:100%">
+    </div>
+    <div class="field" id="sfxOpts">
+      <label>효과음 설정 — 여러 개 동시 재생됨</label>
+      <label style="margin-top:6px">같은 패드 다시 누르면</label>
+      <div class="seg sfx" id="pRetap">
+        <button data-r="overlap">겹쳐 재생</button><button data-r="restart">처음부터</button><button data-r="stop">정지</button>
+      </div>
+    </div>
+    <div class="field"><label>볼륨 <span id="volVal"></span></label>
+      <input type="range" id="pVol" min="0" max="100" value="${Math.round((pad.vol??1)*100)}" style="width:100%"></div>
+    <div class="field"><label>이 패드 글자 크기 <span id="fsVal"></span></label>
+      <input type="range" id="pFont" min="70" max="150" step="5" value="${Math.round((pad.fontScale??1)*100)}" style="width:100%"></div>
+    <div class="field"><label>색상</label><div class="swatches" id="pColors"></div></div>
+    <div class="field"><label>아이콘</label><div class="iconpick" id="pIcons"></div></div>
+    <button class="btn" id="padSave">저장</button>
+    <div class="row" style="margin-top:8px">
+      <button class="btn ghost sm" data-close>취소</button>
+      <button class="btn danger sm" id="padClear">패드 비우기</button>
+    </div>`;
+  // 종류
+  let curType=pad.type;
+  const typeSeg=sheet.querySelector('#pType');
+  function paintType(){typeSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.t===curType));
+    sheet.querySelector('#bgmOpts').classList.toggle('hidden',curType!=='bgm');
+    sheet.querySelector('#sfxOpts').classList.toggle('hidden',curType!=='sfx');}
+  typeSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{curType=b.dataset.t;paintType();});
+  paintType();
+  // loop
+  let curLoop=pad.loop!==false?'1':'0';
+  const loopSeg=sheet.querySelector('#pLoop');
+  function paintLoop(){loopSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.l===curLoop));}
+  loopSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{curLoop=b.dataset.l;paintLoop();});paintLoop();
+  // retap
+  let curRetap=pad.retap||'overlap';
+  const retapSeg=sheet.querySelector('#pRetap');
+  function paintRetap(){retapSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.r===curRetap));}
+  retapSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{curRetap=b.dataset.r;paintRetap();});paintRetap();
+  // sliders
+  const fade=sheet.querySelector('#pFade'),fadeVal=sheet.querySelector('#fadeVal');
+  const setFV=()=>fadeVal.textContent=Number(fade.value).toFixed(1)+'초';fade.oninput=setFV;setFV();
+  const vol=sheet.querySelector('#pVol'),volVal=sheet.querySelector('#volVal');
+  const setVV=()=>volVal.textContent=vol.value+'%';vol.oninput=setVV;setVV();
+  const font=sheet.querySelector('#pFont'),fsVal=sheet.querySelector('#fsVal');
+  const setFS=()=>fsVal.textContent=font.value+'%';font.oninput=setFS;setFS();
+  // colors
+  let curColor=pad.color||'#f59e0b';
+  const cw=sheet.querySelector('#pColors');
+  COLORS.forEach(c=>{const d=document.createElement('div');d.className='swatch'+(c===curColor?' sel':'');d.style.background=c;
+    d.onclick=()=>{curColor=c;cw.querySelectorAll('.swatch').forEach(x=>x.classList.remove('sel'));d.classList.add('sel');};cw.appendChild(d);});
+  // icons
+  let curIcon=pad.icon||'🎵';
+  const iw=sheet.querySelector('#pIcons');
+  ICONS.forEach(ic=>{const b=document.createElement('button');b.textContent=ic;if(ic===curIcon)b.classList.add('sel');
+    b.onclick=()=>{curIcon=ic;iw.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');};iw.appendChild(b);});
+  // save
+  sheet.querySelector('#padSave').onclick=async()=>{
+    pad.name=sheet.querySelector('#pName').value.trim()||'무제';
+    pad.type=curType;pad.loop=curLoop==='1';pad.fade=Number(fade.value);
+    pad.retap=curRetap;pad.vol=Number(vol.value)/100;pad.color=curColor;pad.icon=curIcon;
+    pad.fontScale=Number(font.value)/100;
+    await saveSet();renderGrid();closeOverlays();toast('저장되었습니다');
+  };
+  sheet.querySelector('#padClear').onclick=async()=>{
+    if(pad.audioId)await dbDel('audio',pad.audioId).catch(()=>{});
+    activeSet().pads[idx]=null;await saveSet();renderGrid();closeOverlays();toast('패드를 비웠습니다');
+  };
+  show('padOverlay');
+}
+
+/* ================= 세트 관리 ================= */
+async function addSet(){
+  const name=prompt('새 세트 이름','세트 '+(state.sets.length+1));if(!name)return;
+  const s=newSetObj(name.trim());state.sets.push(s);await dbPut('sets',s);
+  state.activeSetId=s.id;await metaSet('activeSet',s.id);render();toast('새 세트를 만들었습니다');
+}
+async function renameSet(){const s=activeSet();const name=prompt('세트 이름',s.name);if(!name)return;
+  s.name=name.trim();await saveSet();renderSetSelect();}
+async function delSet(){
+  if(state.sets.length<=1){toast('마지막 세트는 삭제할 수 없습니다');return;}
+  const s=activeSet();if(!confirm(`"${s.name}" 세트를 삭제할까요? 음원도 함께 지워집니다.`))return;
+  for(const p of s.pads)if(p&&p.audioId)await dbDel('audio',p.audioId).catch(()=>{});
+  await dbDel('sets',s.id);state.sets=state.sets.filter(x=>x.id!==s.id);
+  state.activeSetId=state.sets[0].id;await metaSet('activeSet',state.activeSetId);render();toast('세트를 삭제했습니다');
+}
+/* 내보내기: 음원을 base64로 묶어 단일 json */
+async function exportSet(){
+  const s=activeSet();toast('내보내기 준비 중…');
+  const audioMap={};
+  for(const p of s.pads){if(p&&p.audioId&&!audioMap[p.audioId]){
+    const rec=await dbGet('audio',p.audioId);if(rec)audioMap[p.audioId]=abToB64(rec.data);}}
+  const pkg={app:'cuepad',ver:1,set:s,audio:audioMap};
+  const blob=new Blob([JSON.stringify(pkg)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=(s.name||'set')+'.cuepad.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);toast('세트를 파일로 저장했습니다');
+}
+function importSet(){const imp=document.getElementById('setImporter');imp.value='';imp.click();}
+document.getElementById('setImporter').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{const pkg=JSON.parse(await f.text());
+    if(pkg.app!=='cuepad')throw 0;
+    const s=pkg.set;const idMap={};
+    for(const oldId in pkg.audio){const newId=uid();idMap[oldId]=newId;
+      await dbPut('audio',{id:newId,data:b64ToAb(pkg.audio[oldId])});}
+    s.id=uid();s.name=(s.name||'가져온 세트');
+    s.pads=s.pads.map(p=>{if(p&&p.audioId&&idMap[p.audioId])p.audioId=idMap[p.audioId];return p;});
+    state.sets.push(s);await dbPut('sets',s);
+    state.activeSetId=s.id;await metaSet('activeSet',s.id);render();toast('세트를 불러왔습니다');
+  }catch(err){toast('파일을 읽을 수 없습니다');}
+};
+function abToB64(ab){let bin='';const bytes=new Uint8Array(ab);const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+  return btoa(bin);}
+function b64ToAb(b64){const bin=atob(b64);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes.buffer;}
+
+/* ================= 그리드 크기 ================= */
+function openGridSize(){
+  const s=activeSet();
+  const colSeg=document.getElementById('colSeg'),countSeg=document.getElementById('countSeg');
+  colSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',+b.dataset.c===s.cols));
+  countSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',+b.dataset.n===s.count));
+  colSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{colSeg.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');});
+  countSeg.querySelectorAll('button').forEach(b=>b.onclick=()=>{countSeg.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');});
+  show('gridOverlay');
+}
+document.getElementById('gridApply').onclick=async()=>{
+  const s=activeSet();
+  const cols=Number(document.querySelector('#colSeg button.active')?.dataset.c)||3;
+  const count=Number(document.querySelector('#countSeg button.active')?.dataset.n)||9;
+  s.cols=cols;
+  if(count<s.pads.length){ // 줄이면 잘리는 패드 음원 정리
+    for(let i=count;i<s.pads.length;i++){const p=s.pads[i];if(p&&p.audioId)await dbDel('audio',p.audioId).catch(()=>{});}
+    s.pads=s.pads.slice(0,count);
+  }else{while(s.pads.length<count)s.pads.push(null);}
+  s.count=count;await saveSet();renderGrid();closeOverlays();
+};
+
+/* ================= 전체 글자 크기 ================= */
+function openFontSize(){
+  const s=activeSet();
+  const g=document.getElementById('gFont'),v=document.getElementById('gFontVal');
+  g.value=Math.round((s.fontScale||1)*100);
+  const upd=()=>v.textContent=g.value+'%';g.oninput=upd;upd();
+  show('fontOverlay');
+}
+document.getElementById('gFontApply').onclick=async()=>{
+  const s=activeSet();s.fontScale=Number(document.getElementById('gFont').value)/100;
+  await saveSet();renderGrid();closeOverlays();toast('글자 크기를 적용했습니다');
+};
+
+/* ================= UI 글루 ================= */
+function show(id){document.getElementById(id).classList.add('show');}
+function closeOverlays(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'));}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeOverlays();}));
+document.addEventListener('click',e=>{if(e.target.matches('[data-close]'))closeOverlays();});
+let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);}
+
+document.getElementById('setSelect').onchange=async e=>{
+  state.activeSetId=e.target.value;await metaSet('activeSet',state.activeSetId);
+  panic();render();};
+document.getElementById('setMenuBtn').onclick=()=>show('appMenuOverlay');
+document.getElementById('appMenuBtn').onclick=()=>show('appMenuOverlay');
+document.getElementById('editBtn').onclick=function(){editMode=!editMode;
+  document.body.classList.toggle('editmode',editMode);this.classList.toggle('on',editMode);
+  toast(editMode?'편집 모드 — 패드를 눌러 설정':'편집 모드 종료');};
+document.getElementById('panicBtn').onclick=panic;
+document.getElementById('bgmStop').onclick=()=>stopBGM();
+
+document.querySelectorAll('#appMenuOverlay .menu-item').forEach(mi=>{
+  mi.onclick=()=>{const a=mi.dataset.act;closeOverlays();
+    if(a==='add-set')addSet();else if(a==='rename-set')renameSet();
+    else if(a==='grid-size')openGridSize();else if(a==='font-size')openFontSize();
+    else if(a==='export')exportSet();
+    else if(a==='import')importSet();else if(a==='del-set')delSet();
+    else if(a==='install')showWelcomeAgain();};
+});
+
+// 볼륨
+const mv=document.getElementById('masterVol'),bv=document.getElementById('bgmVol');
+mv.oninput=()=>{setMaster(mv.value/100);metaSet('master',mv.value);};
+bv.oninput=()=>{setBgmVol(bv.value/100);metaSet('bgmvol',bv.value);};
+
+// 키보드 단축키 (노트북) 1-9,0
+document.addEventListener('keydown',e=>{
+  if(document.querySelector('.overlay.show'))return;
+  if(e.target.matches('input,select,textarea'))return;
+  const map={'1':0,'2':1,'3':2,'4':3,'5':4,'6':5,'7':6,'8':7,'9':8,'0':9};
+  if(e.key in map){const idx=map[e.key];const pad=activeSet().pads[idx];
+    if(pad){const el=document.querySelector(`.pad[data-idx="${idx}"]`);
+      if(el){const rp=el.querySelector('.ripple');if(rp){const r=el.getBoundingClientRect();
+        rp.style.left=(r.width/2)+'px';rp.style.top=(r.height/2)+'px';
+        rp.classList.remove('go');void rp.offsetWidth;rp.classList.add('go');}}
+      playPad(pad,el);}}
+  if(e.key===' '||e.key==='Escape'){e.preventDefault();panic();}
+});
+
+/* ================= 시작 화면 / 설치 ================= */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;
+  // 시작 화면이 떠 있으면 버튼 상태 갱신
+  const w=document.getElementById('welcome');if(w&&!w.classList.contains('hide'))renderInstallArea();
+});
+window.addEventListener('appinstalled',()=>{deferredPrompt=null;renderInstallArea();toast('설치되었습니다');});
+
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+}
+function detectPlatform(){
+  const ua=navigator.userAgent;
+  const ios=/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document);
+  const android=/Android/i.test(ua);
+  const isSafari=/^((?!chrome|crios|android).)*safari/i.test(ua);
+  const isChromeIOS=/CriOS/i.test(ua);
+  const isFirefoxIOS=/FxiOS/i.test(ua);
+  return {ios,android,isSafari,isChromeIOS,isFirefoxIOS,desktop:!ios&&!android};
+}
+
+function renderInstallArea(){
+  const box=document.getElementById('wInstall');if(!box)return;
+  if(isStandalone()){
+    box.innerHTML='<div class="w-install-card"><div class="w-done">✓ 이미 앱으로 설치되어 있어요</div></div>';
+    return;
+  }
+  const p=detectPlatform();
+  // 안드로이드/PC 크롬·엣지 — 진짜 설치 버튼 가능
+  if(deferredPrompt){
+    box.innerHTML=`<div class="w-install-card">
+      <div class="wi-head"><span>📲</span>홈 화면에 앱으로 설치<span class="wi-badge">한 번에 설치</span></div>
+      <button class="w-btn-install" id="wDoInstall">＋ 지금 설치하기</button>
+      <p class="wi-note">설치하면 홈 화면에 아이콘이 생기고, 전체화면 앱처럼 열리며 오프라인에서도 작동합니다.</p>
+    </div>`;
+    document.getElementById('wDoInstall').onclick=async()=>{
+      deferredPrompt.prompt();
+      const {outcome}=await deferredPrompt.userChoice;
+      deferredPrompt=null;
+      if(outcome==='accepted'){toast('설치를 시작합니다');}else{renderInstallArea();}
+    };
+    return;
+  }
+  // 아이폰 — 사파리 수동 안내
+  if(p.ios){
+    if(p.isChromeIOS||p.isFirefoxIOS){
+      box.innerHTML=`<div class="w-install-card">
+        <div class="wi-head"><span>⚠️</span>사파리로 열어주세요</div>
+        <p class="wi-note" style="margin-top:0">아이폰·아이패드에서는 <b>사파리(Safari)</b>에서만 홈 화면에 설치할 수 있어요. 이 주소를 사파리로 다시 열어주세요.</p>
+      </div>`;
+    }else{
+      box.innerHTML=`<div class="w-install-card">
+        <div class="wi-head"><span>📲</span>홈 화면에 추가하기</div>
+        <ol class="wi-steps">
+          <li>화면 아래 <span class="k">⬆ 공유</span> 버튼을 누르세요</li>
+          <li>메뉴를 내려 <b>홈 화면에 추가</b>를 누르세요</li>
+          <li>오른쪽 위 <b>추가</b>를 누르면 끝이에요</li>
+        </ol>
+        <p class="wi-note">홈 화면에 생긴 아이콘으로 열면 전체화면 앱처럼 작동합니다.</p>
+      </div>`;
+    }
+    return;
+  }
+  // 안드로이드인데 prompt가 아직 안 온 경우 / 기타
+  if(p.android){
+    box.innerHTML=`<div class="w-install-card">
+      <div class="wi-head"><span>📲</span>홈 화면에 추가하기</div>
+      <ol class="wi-steps">
+        <li>브라우저 오른쪽 위 <span class="k">⋮ 메뉴</span>를 누르세요</li>
+        <li><b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 누르세요</li>
+        <li><b>설치</b>를 누르면 끝이에요</li>
+      </ol>
+      <p class="wi-note">크롬·엣지에서 잠시 후 자동 설치 버튼이 나타날 수도 있어요.</p>
+    </div>`;
+    return;
+  }
+  // PC 기타
+  box.innerHTML=`<div class="w-install-card">
+    <div class="wi-head"><span>💻</span>앱으로 설치하기</div>
+    <ol class="wi-steps">
+      <li>주소창 오른쪽의 <span class="k">⊕ 설치</span> 아이콘을 누르세요</li>
+      <li><b>설치</b>를 누르면 창처럼 열려요</li>
+    </ol>
+    <p class="wi-note">크롬·엣지에서 설치 아이콘이 보입니다. 없으면 메뉴 → 앱 설치를 확인하세요.</p>
+  </div>`;
+}
+
+async function maybeShowWelcome(){
+  const seen=await metaGet('welcomeSeen',false);
+  const w=document.getElementById('welcome');
+  if(seen||isStandalone()){w.classList.add('hide');return;}
+  renderInstallArea();
+  document.getElementById('wStart').onclick=async()=>{
+    await metaSet('welcomeSeen',true);w.classList.add('hide');ensureCtx();
+  };
+}
+function showWelcomeAgain(){
+  const w=document.getElementById('welcome');renderInstallArea();w.classList.remove('hide');
+}
+
+/* ================= 부팅 ================= */
+(async function(){
+  await openDB();await loadAll();
+  const m=await metaGet('master',100),b=await metaGet('bgmvol',80);
+  mv.value=m;bv.value=b;setMaster(m/100);setBgmVol(b/100);
+  render();
+  await maybeShowWelcome();
+  document.body.addEventListener('pointerdown',()=>ensureCtx(),{once:true});
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+})();
+</script>
+</body>
+</html>
