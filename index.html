@@ -992,7 +992,28 @@ function showWelcomeAgain(){
   render();
   await maybeShowWelcome();
   document.body.addEventListener('pointerdown',()=>ensureCtx(),{once:true});
-  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      // 열려 있는 동안 주기적으로 새 버전 확인(백그라운드)
+      setInterval(()=>reg.update().catch(()=>{}),60*60*1000); // 1시간마다
+      reg.addEventListener('updatefound',()=>{
+        const nw=reg.installing;if(!nw)return;
+        nw.addEventListener('statechange',()=>{
+          // 새 버전이 설치 완료되면 조용히 대기 → skipWaiting으로 다음 실행 때 적용됨
+          // (별도 알림 없이 매끄럽게 갱신)
+        });
+      });
+    }).catch(()=>{});
+    // 새 서비스워커가 제어권을 넘겨받으면 한 번만 새로고침해 최신 화면 반영
+    let refreshed=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(refreshed)return;refreshed=true;
+      // 녹음/재생 중이 아닐 때만 조용히 새로고침
+      if(!currentBGM && activeSFX.size===0 && !document.querySelector('#recStop')){
+        location.reload();
+      }
+    });
+  }
 })();
 </script>
 </body>
