@@ -160,7 +160,10 @@
 
   .recbox{text-align:center;padding:18px;background:var(--panel);border-radius:12px;margin-bottom:12px;}
   .recbox .timer{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px;}
-  .recbox .wave{display:block;width:100%;height:70px;margin:12px 0 4px;background:#0d1117;border-radius:10px;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);}
+  .recbox .wave{display:block;width:100%;height:70px;margin:8px 0 4px;background:#0d1117;border-radius:10px;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);}
+  .viz-tabs{display:inline-flex;gap:3px;margin:12px 0 0;background:#12161c;border:1px solid #0d1015;border-radius:8px;padding:3px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .viz-tabs button{padding:5px 16px;border:none;background:transparent;border-radius:6px;font-size:12px;font-weight:700;color:var(--txt2);}
+  .viz-tabs button.active{background:linear-gradient(180deg,#4a90f0,#2f6fd0);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);}
 
   /* 파형 트리밍 */
   .trim-wrap{position:relative;width:100%;height:80px;background:#0d1117;border-radius:10px;overflow:hidden;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);touch-action:none;margin-bottom:10px;}
@@ -623,6 +626,10 @@ async function startRecording(stream,label){
   sheet.innerHTML=`<h2>${label}</h2><p class="sub">녹음 중입니다. 끝나면 정지를 누르세요.</p>
     <div class="recbox">
       <div class="timer" id="recTimer"><span class="recdot"></span>00:00</div>
+      <div class="viz-tabs" id="vizTabs">
+        <button data-v="wave" class="active">파형</button>
+        <button data-v="rta">RTA</button>
+      </div>
       <canvas class="wave" id="recWave" width="600" height="120"></canvas>
       <div class="hint">${label==='시스템 오디오 녹음'?'재생할 음원을 지금 틀어주세요':'마이크에 대고 녹음하세요'}</div>
     </div>
@@ -631,7 +638,13 @@ async function startRecording(stream,label){
   timerInt=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);
     document.getElementById('recTimer').innerHTML='<span class="recdot"></span>'+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},250);
 
-  // ---- 실시간 파형 (AnalyserNode) ----
+  let vizMode='wave';  // 'wave' 또는 'rta'
+  const vizTabs=document.getElementById('vizTabs');
+  vizTabs.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    vizMode=b.dataset.v;vizTabs.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
+  });
+
+  // ---- 실시간 파형 + RTA (AnalyserNode) ----
   let waveCtx2,analyser,waveActive=true;
   const accent=label==='마이크 녹음'?'#f59e0b':'#3b82f6';
   try{
@@ -642,29 +655,53 @@ async function startRecording(stream,label){
     const canvas=document.getElementById('recWave');
     waveCtx2=canvas.getContext('2d');
     const W=canvas.width,H=canvas.height;
-    const data=new Uint8Array(analyser.frequencyBinCount);
-    const bars=[];                       // 흐르는 막대 히스토리
+    const timeData=new Uint8Array(analyser.frequencyBinCount);
+    const freqData=new Uint8Array(analyser.frequencyBinCount);
+    const bars=[];                       // 파형용 흐르는 막대 히스토리
     const maxBars=60,barGap=1;
     const barW=W/maxBars;
-    function draw(){
-      if(!waveActive)return;
-      analyser.getByteTimeDomainData(data);
-      // 이번 프레임의 진폭(RMS) 계산 → 0~1
-      let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}
-      const rms=Math.sqrt(sum/data.length);
-      const level=Math.min(1,rms*3.2);   // 보기 좋게 증폭
+    const rtaBands=32;                    // RTA 막대 개수
+    const rtaPeaks=new Array(rtaBands).fill(0);
+    function drawWaveMode(){
+      analyser.getByteTimeDomainData(timeData);
+      let sum=0;for(let i=0;i<timeData.length;i++){const v=(timeData[i]-128)/128;sum+=v*v;}
+      const level=Math.min(1,Math.sqrt(sum/timeData.length)*3.2);
       bars.push(level);if(bars.length>maxBars)bars.shift();
-      // 그리기
       waveCtx2.clearRect(0,0,W,H);
       for(let i=0;i<bars.length;i++){
-        const bh=Math.max(2,bars[i]*H*0.92);
-        const x=i*barW;const y=(H-bh)/2;
-        waveCtx2.fillStyle=accent;
-        waveCtx2.globalAlpha=0.35+0.65*(i/bars.length); // 최근일수록 진하게
+        const bh=Math.max(2,bars[i]*H*0.92);const x=i*barW;const y=(H-bh)/2;
+        waveCtx2.fillStyle=accent;waveCtx2.globalAlpha=0.35+0.65*(i/bars.length);
         roundRect(waveCtx2,x+barGap,y,barW-barGap*2,bh,Math.min(3,(barW-barGap*2)/2));
         waveCtx2.fill();
       }
       waveCtx2.globalAlpha=1;
+    }
+    function drawRTAMode(){
+      analyser.getByteFrequencyData(freqData);
+      waveCtx2.clearRect(0,0,W,H);
+      const bins=freqData.length;const gap=2;const bw=W/rtaBands;
+      for(let b=0;b<rtaBands;b++){
+        // 로그 스케일로 주파수 대역 매핑(저음 왼쪽, 고음 오른쪽)
+        const lo=Math.floor(Math.pow(bins,b/rtaBands));
+        const hi=Math.max(lo+1,Math.floor(Math.pow(bins,(b+1)/rtaBands)));
+        let max=0;for(let i=lo;i<hi&&i<bins;i++)if(freqData[i]>max)max=freqData[i];
+        const v=max/255;
+        const bh=Math.max(2,v*H*0.95);const x=b*bw;const y=H-bh;
+        // 저음 파랑 → 고음 노랑 그라데이션
+        const t=b/rtaBands;
+        const r=Math.round(59+(245-59)*t),g=Math.round(130+(158-130)*t),bl=Math.round(246+(11-246)*t);
+        waveCtx2.fillStyle=`rgb(${r},${g},${bl})`;
+        roundRect(waveCtx2,x+gap,y,bw-gap*2,bh,Math.min(3,(bw-gap*2)/2));waveCtx2.fill();
+        // 피크 홀드
+        if(v>rtaPeaks[b])rtaPeaks[b]=v;else rtaPeaks[b]=Math.max(0,rtaPeaks[b]-0.012);
+        const py=H-Math.max(2,rtaPeaks[b]*H*0.95);
+        waveCtx2.fillStyle='rgba(255,255,255,.55)';
+        waveCtx2.fillRect(x+gap,py-2,bw-gap*2,2);
+      }
+    }
+    function draw(){
+      if(!waveActive)return;
+      if(vizMode==='rta')drawRTAMode();else drawWaveMode();
       rafId=requestAnimationFrame(draw);
     }
     draw();
@@ -920,6 +957,8 @@ async function setupTrim(sheet,pad){
   btnApply.onclick=async()=>{
     if(selEnd-selStart<0.05){toast('선택 구간이 너무 짧습니다');return;}
     if(selStart<=0.001&&selEnd>=dur-0.001){toast('전체 구간이라 자를 필요가 없어요');return;}
+    const ok=confirm(`선택한 ${fmtDur(selEnd-selStart)} 구간만 남기고 자릅니다.\n\n이 작업은 되돌릴 수 없어요. 원본을 지우고 잘린 음원으로 바뀝니다. 진행할까요?`);
+    if(!ok)return;
     btnApply.disabled=true;btnApply.textContent='자르는 중…';
     try{
       const trimmed=sliceBuffer(buf,selStart,selEnd);
