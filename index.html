@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0a0c10">
-<title>영어 발표회 BGM 플레이어</title>
+<title>DA cue pad</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="BGM 플레이어">
+<meta name="apple-mobile-web-app-title" content="DA cue pad">
 <style>
   :root{
     --bg:#0a0c10; --bg2:#171b21; --panel:#222831; --panel2:#2a313c;
@@ -160,6 +160,7 @@
 
   .recbox{text-align:center;padding:18px;background:var(--panel);border-radius:12px;margin-bottom:12px;}
   .recbox .timer{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px;}
+  .recbox .wave{display:block;width:100%;height:70px;margin:12px 0 4px;background:#0d1117;border-radius:10px;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);}
   .recbox .recdot{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:middle;animation:pulse 1s infinite;}
   .recbox .hint{font-size:12px;color:var(--txt2);margin-top:6px;}
 
@@ -185,7 +186,7 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 34px rgba(59,130,246,.3),0 3px 8px rgba(0,0,0,.5);}
   .w-logo-img{width:128px;height:128px;border-radius:26px;margin:0 auto 16px;display:block;object-fit:cover;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 12px 36px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06);}
-  .w-title{margin:0;font-size:25px;font-weight:800;letter-spacing:.5px;color:#cdd6e2;text-shadow:var(--emboss);line-height:1.3;}
+  .w-title{margin:0;font-size:30px;font-weight:800;letter-spacing:1px;color:#cdd6e2;text-shadow:var(--emboss);line-height:1.2;}
   .w-tag{margin:6px 0 26px;font-size:14px;color:var(--txt2);}
   .w-feats{display:flex;flex-direction:column;gap:13px;text-align:left;margin-bottom:26px;}
   .w-feat{display:flex;gap:13px;align-items:flex-start;background:linear-gradient(180deg,#262c35,#1e232b);border:1px solid #0d1015;border-radius:13px;padding:13px 15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 5px rgba(0,0,0,.35);}
@@ -225,7 +226,7 @@
 <div class="welcome" id="welcome">
   <div class="welcome-inner">
     <img class="w-logo-img" src="icon-512.png" alt="다니엘 아마츠">
-    <h1 class="w-title">영어 발표회<br>BGM 플레이어</h1>
+    <h1 class="w-title">DA cue pad</h1>
     <p class="w-tag">다니엘 아마츠 · 발표회와 연극을 위한 사운드 패드</p>
 
     <div class="w-feats">
@@ -245,7 +246,7 @@
 
 
 <div class="topbar">
-  <div class="brand"><img class="logo-img" src="icon-192.png" alt=""><span>BGM 플레이어</span></div>
+  <div class="brand"><img class="logo-img" src="icon-192.png" alt=""><span>DA cue pad</span></div>
   <div class="set-select">
     <select class="set" id="setSelect"></select>
     <button class="iconbtn" id="setMenuBtn" title="세트 메뉴">⋯</button>
@@ -282,6 +283,7 @@
     <div class="menu-item" data-act="rename-set"><span class="mi-icon">✎</span><div><div>현재 세트 이름 바꾸기</div></div></div>
     <div class="menu-item" data-act="grid-size"><span class="mi-icon">▦</span><div><div>패드 배치 바꾸기</div><div class="mi-sub">열 개수와 패드 수 조절</div></div></div>
     <div class="menu-item" data-act="font-size"><span class="mi-icon">🔠</span><div><div>전체 글자 크기</div><div class="mi-sub">모든 패드 글자를 한번에 조절</div></div></div>
+    <div class="menu-item" data-act="share"><span class="mi-icon">📤</span><div><div>세트 공유하기</div><div class="mi-sub">메일·메신저로 음원 세트 보내기</div></div></div>
     <div class="menu-item" data-act="export"><span class="mi-icon">⤓</span><div><div>세트 파일로 내보내기</div><div class="mi-sub">음원까지 묶어 백업 (.json)</div></div></div>
     <div class="menu-item" data-act="import"><span class="mi-icon">⤒</span><div><div>세트 파일 불러오기</div><div class="mi-sub">백업한 파일에서 복원</div></div></div>
     <div class="menu-item" data-act="install"><span class="mi-icon">📲</span><div><div>홈 화면에 설치</div><div class="mi-sub">앱처럼 설치하는 방법 안내</div></div></div>
@@ -605,16 +607,60 @@ let recState=null;
 async function startRecording(stream,label){
   const chunks=[];const mr=new MediaRecorder(stream);
   mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
-  let t0=Date.now(),timerInt;
+  let t0=Date.now(),timerInt,rafId;
   const sheet=document.getElementById('inputSheet');
   sheet.innerHTML=`<h2>${label}</h2><p class="sub">녹음 중입니다. 끝나면 정지를 누르세요.</p>
-    <div class="recbox"><div class="timer" id="recTimer"><span class="recdot"></span>00:00</div>
-    <div class="hint">${label==='시스템 오디오 녹음'?'재생할 음원을 지금 틀어주세요':'마이크에 대고 녹음하세요'}</div></div>
+    <div class="recbox">
+      <div class="timer" id="recTimer"><span class="recdot"></span>00:00</div>
+      <canvas class="wave" id="recWave" width="600" height="120"></canvas>
+      <div class="hint">${label==='시스템 오디오 녹음'?'재생할 음원을 지금 틀어주세요':'마이크에 대고 녹음하세요'}</div>
+    </div>
     <button class="btn danger" id="recStop">■ 녹음 정지</button>`;
   show('inputOverlay');
   timerInt=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);
     document.getElementById('recTimer').innerHTML='<span class="recdot"></span>'+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},250);
-  mr.onstop=async()=>{clearInterval(timerInt);
+
+  // ---- 실시간 파형 (AnalyserNode) ----
+  let waveCtx2,analyser,waveActive=true;
+  const accent=label==='마이크 녹음'?'#f59e0b':'#3b82f6';
+  try{
+    await ensureCtx();
+    const srcNode=ac.createMediaStreamSource(stream);
+    analyser=ac.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.75;
+    srcNode.connect(analyser); // destination엔 연결 안 함 → 하울링 방지
+    const canvas=document.getElementById('recWave');
+    waveCtx2=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height;
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    const bars=[];                       // 흐르는 막대 히스토리
+    const maxBars=60,barGap=1;
+    const barW=W/maxBars;
+    function draw(){
+      if(!waveActive)return;
+      analyser.getByteTimeDomainData(data);
+      // 이번 프레임의 진폭(RMS) 계산 → 0~1
+      let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}
+      const rms=Math.sqrt(sum/data.length);
+      const level=Math.min(1,rms*3.2);   // 보기 좋게 증폭
+      bars.push(level);if(bars.length>maxBars)bars.shift();
+      // 그리기
+      waveCtx2.clearRect(0,0,W,H);
+      for(let i=0;i<bars.length;i++){
+        const bh=Math.max(2,bars[i]*H*0.92);
+        const x=i*barW;const y=(H-bh)/2;
+        waveCtx2.fillStyle=accent;
+        waveCtx2.globalAlpha=0.35+0.65*(i/bars.length); // 최근일수록 진하게
+        roundRect(waveCtx2,x+barGap,y,barW-barGap*2,bh,Math.min(3,(barW-barGap*2)/2));
+        waveCtx2.fill();
+      }
+      waveCtx2.globalAlpha=1;
+      rafId=requestAnimationFrame(draw);
+    }
+    draw();
+  }catch(e){/* 파형 실패해도 녹음은 계속 */}
+  function stopWave(){waveActive=false;if(rafId)cancelAnimationFrame(rafId);}
+
+  mr.onstop=async()=>{clearInterval(timerInt);stopWave();
     stream.getTracks().forEach(t=>t.stop());
     document.getElementById('inputOverlay').classList.remove('show');
     const blob=new Blob(chunks,{type:chunks[0]?.type||'audio/webm'});
@@ -626,9 +672,13 @@ async function startRecording(stream,label){
   document.getElementById('recStop').onclick=function(){
     if(mr.state==='inactive')return;
     this.disabled=true;this.textContent='저장 중…';this.style.opacity='.6';
-    clearInterval(timerInt);
+    clearInterval(timerInt);stopWave();
     mr.stop();
   };
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
 }
 async function recordSystem(){
   try{
@@ -771,16 +821,44 @@ async function delSet(){
   state.activeSetId=state.sets[0].id;await metaSet('activeSet',state.activeSetId);render();toast('세트를 삭제했습니다');
 }
 /* 내보내기: 음원을 base64로 묶어 단일 json */
-async function exportSet(){
-  const s=activeSet();toast('내보내기 준비 중…');
+async function buildSetFile(){
+  const s=activeSet();
   const audioMap={};
   for(const p of s.pads){if(p&&p.audioId&&!audioMap[p.audioId]){
     const rec=await dbGet('audio',p.audioId);if(rec)audioMap[p.audioId]=abToB64(rec.data);}}
   const pkg={app:'cuepad',ver:1,set:s,audio:audioMap};
-  const blob=new Blob([JSON.stringify(pkg)],{type:'application/json'});
+  const json=JSON.stringify(pkg);
+  const fname=(s.name||'set').replace(/[^\w가-힣 -]/g,'')+'.cuepad.json';
+  return {json,fname,name:s.name};
+}
+async function exportSet(){
+  toast('내보내기 준비 중…');
+  const {json,fname}=await buildSetFile();
+  const blob=new Blob([json],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download=(s.name||'set')+'.cuepad.json';a.click();
+  a.href=url;a.download=fname;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast('세트를 파일로 저장했습니다');
+}
+/* 공유: 메일·메신저 등으로 세트 파일 보내기 */
+async function shareSet(){
+  toast('공유 준비 중…');
+  const {json,fname,name}=await buildSetFile();
+  const file=new File([json],fname,{type:'application/json'});
+  // 파일 공유 지원(주로 모바일) → 공유 시트
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:'DA cue pad 세트',
+      text:`DA cue pad 음원 세트: ${name}`});
+      return;
+    }catch(e){if(e.name==='AbortError')return; /* 취소 */ }
+  }
+  // 파일 공유 미지원 → 파일은 내려받고 메일 앱 열기 안내
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const subject=encodeURIComponent(`DA cue pad 세트: ${name}`);
+  const body=encodeURIComponent(`DA cue pad 음원 세트 파일(${fname})을 첨부해 보냅니다.\n\n방금 내려받은 파일을 이 메일에 첨부한 뒤 보내주세요.`);
+  toast('파일을 내려받았어요. 메일에 첨부해 보내세요');
+  setTimeout(()=>{location.href=`mailto:?subject=${subject}&body=${body}`;},600);
 }
 function importSet(){const imp=document.getElementById('setImporter');imp.value='';imp.click();}
 document.getElementById('setImporter').onchange=async e=>{
@@ -860,7 +938,7 @@ document.querySelectorAll('#appMenuOverlay .menu-item').forEach(mi=>{
   mi.onclick=()=>{const a=mi.dataset.act;closeOverlays();
     if(a==='add-set')addSet();else if(a==='rename-set')renameSet();
     else if(a==='grid-size')openGridSize();else if(a==='font-size')openFontSize();
-    else if(a==='export')exportSet();
+    else if(a==='export')exportSet();else if(a==='share')shareSet();
     else if(a==='import')importSet();else if(a==='del-set')delSet();
     else if(a==='install')showWelcomeAgain();};
 });

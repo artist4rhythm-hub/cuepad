@@ -1,7 +1,7 @@
 {
-  "name": "영어 발표회 BGM 플레이어",
-  "short_name": "BGM 플레이어",
-  "description": "다니엘 아마츠 영어 발표회·연극용 BGM·효과음 사운드 패드",
+  "name": "DA cue pad",
+  "short_name": "DA cue pad",
+  "description": "다니엘 아마츠 발표회·연극용 BGM·효과음 사운드 패드",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
