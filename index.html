@@ -161,6 +161,17 @@
   .recbox{text-align:center;padding:18px;background:var(--panel);border-radius:12px;margin-bottom:12px;}
   .recbox .timer{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px;}
   .recbox .wave{display:block;width:100%;height:70px;margin:12px 0 4px;background:#0d1117;border-radius:10px;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);}
+
+  /* 파형 트리밍 */
+  .trim-wrap{position:relative;width:100%;height:80px;background:#0d1117;border-radius:10px;overflow:hidden;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);touch-action:none;margin-bottom:10px;}
+  .trim-wave{display:block;width:100%;height:100%;}
+  .trim-sel{position:absolute;top:0;bottom:0;background:rgba(245,158,11,.16);border-left:2px solid var(--sfx);border-right:2px solid var(--sfx);pointer-events:none;}
+  .trim-handle{position:absolute;top:0;bottom:0;width:22px;margin-left:-11px;cursor:ew-resize;z-index:3;touch-action:none;}
+  .trim-handle::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:6px;height:36px;border-radius:3px;background:var(--sfx);box-shadow:0 1px 4px rgba(0,0,0,.6);}
+  .trim-playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.8);opacity:0;pointer-events:none;z-index:2;}
+  .trim-btns{display:flex;gap:8px;}
+  .trim-btns .btn{flex:1;}
+  .trim-field label{display:flex;justify-content:space-between;align-items:center;}
   .recbox .recdot{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:middle;animation:pulse 1s infinite;}
   .recbox .hint{font-size:12px;color:var(--txt2);margin-top:6px;}
 
@@ -723,6 +734,21 @@ function openPadEditor(idx,isNew){
   sheet.innerHTML=`
     <h2>${isNew?'음원 설정':'패드 편집'}</h2><p class="sub">패드 ${idx+1}번</p>
     <div class="field"><label>이름</label><input type="text" id="pName" maxlength="24" value="${esc(pad.name)}" placeholder="예: 천둥소리"></div>
+    <div class="field trim-field">
+      <label>음원 자르기 <span id="trimInfo" style="color:var(--txt3)"></span></label>
+      <div class="trim-wrap" id="trimWrap">
+        <canvas class="trim-wave" id="trimWave" width="600" height="150"></canvas>
+        <div class="trim-sel" id="trimSel"></div>
+        <div class="trim-handle l" id="trimL"></div>
+        <div class="trim-handle r" id="trimR"></div>
+        <div class="trim-playhead" id="trimPlayhead"></div>
+      </div>
+      <div class="trim-btns">
+        <button class="btn ghost sm" id="trimPlay">▶ 구간 듣기</button>
+        <button class="btn ghost sm" id="trimReset">↺ 전체</button>
+        <button class="btn sfx sm" id="trimApply">✂ 이 구간으로 자르기</button>
+      </div>
+    </div>
     <div class="field"><label>종류</label>
       <div class="seg" id="pType">
         <button data-t="bgm">🎵 배경음악 (BGM)</button>
@@ -790,6 +816,8 @@ function openPadEditor(idx,isNew){
   const iw=sheet.querySelector('#pIcons');
   ICONS.forEach(ic=>{const b=document.createElement('button');b.textContent=ic;if(ic===curIcon)b.classList.add('sel');
     b.onclick=()=>{curIcon=ic;iw.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');};iw.appendChild(b);});
+  // ===== 파형 트리밍 =====
+  setupTrim(sheet,pad);
   // save
   sheet.querySelector('#padSave').onclick=async()=>{
     pad.name=sheet.querySelector('#pName').value.trim()||'무제';
@@ -805,7 +833,143 @@ function openPadEditor(idx,isNew){
   show('padOverlay');
 }
 
-/* ================= 세트 관리 ================= */
+/* ================= 파형 트리밍 ================= */
+let trimPreviewSrc=null;
+async function setupTrim(sheet,pad){
+  const wrap=sheet.querySelector('#trimWrap');
+  const canvas=sheet.querySelector('#trimWave');
+  const selEl=sheet.querySelector('#trimSel');
+  const hL=sheet.querySelector('#trimL'),hR=sheet.querySelector('#trimR');
+  const playhead=sheet.querySelector('#trimPlayhead');
+  const info=sheet.querySelector('#trimInfo');
+  const btnPlay=sheet.querySelector('#trimPlay'),btnReset=sheet.querySelector('#trimReset'),btnApply=sheet.querySelector('#trimApply');
+  let buf=null;
+  try{await ensureCtx();buf=await getBuffer(pad.audioId);}catch(e){}
+  if(!buf){sheet.querySelector('.trim-field').style.display='none';return;}
+  const dur=buf.duration;
+  let selStart=0,selEnd=dur;    // 초 단위 선택 구간
+
+  // 파형 그리기 (다운샘플 후 미러 막대)
+  function drawWave(){
+    const W=canvas.width,H=canvas.height;const ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,W,H);
+    const ch=buf.getChannelData(0);
+    const step=Math.floor(ch.length/W)||1;const mid=H/2;
+    ctx.fillStyle='#3a4453';
+    for(let x=0;x<W;x++){
+      let min=1,max=-1;
+      for(let i=0;i<step;i++){const v=ch[x*step+i]||0;if(v<min)min=v;if(v>max)max=v;}
+      const y1=mid+min*mid*0.9,y2=mid+max*mid*0.9;
+      ctx.fillRect(x,y1,1,Math.max(1,y2-y1));
+    }
+  }
+  drawWave();
+
+  function pxToSec(px){return Math.max(0,Math.min(dur,(px/wrap.clientWidth)*dur));}
+  function secToPct(s){return (s/dur)*100;}
+  function paint(){
+    selEl.style.left=secToPct(selStart)+'%';
+    selEl.style.width=(secToPct(selEnd)-secToPct(selStart))+'%';
+    hL.style.left=secToPct(selStart)+'%';
+    hR.style.left=secToPct(selEnd)+'%';
+    info.textContent=`선택 ${fmtDur(selEnd-selStart)} / 전체 ${fmtDur(dur)}`;
+  }
+  paint();
+
+  // 핸들 드래그
+  function dragHandle(handle,isLeft){
+    handle.addEventListener('pointerdown',e=>{
+      e.preventDefault();handle.setPointerCapture(e.pointerId);
+      const move=ev=>{
+        const rect=wrap.getBoundingClientRect();
+        let s=pxToSec(ev.clientX-rect.left);
+        if(isLeft){selStart=Math.min(s,selEnd-0.05);}
+        else{selEnd=Math.max(s,selStart+0.05);}
+        paint();
+      };
+      const up=()=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);};
+      handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);
+    });
+  }
+  dragHandle(hL,true);dragHandle(hR,false);
+
+  // 구간 미리듣기
+  btnPlay.onclick=async()=>{
+    await ensureCtx();
+    if(trimPreviewSrc){try{trimPreviewSrc.stop()}catch(e){}trimPreviewSrc=null;playhead.style.opacity='0';return;}
+    const src=ac.createBufferSource();src.buffer=buf;src.connect(masterGain);
+    trimPreviewSrc=src;
+    src.start(0,selStart,selEnd-selStart);
+    // 재생 헤드 애니메이션
+    playhead.style.opacity='1';
+    const t0=ac.currentTime;
+    function anim(){
+      if(trimPreviewSrc!==src)return;
+      const elapsed=ac.currentTime-t0;
+      const pos=selStart+elapsed;
+      if(pos>=selEnd){playhead.style.opacity='0';return;}
+      playhead.style.left=secToPct(pos)+'%';
+      requestAnimationFrame(anim);
+    }
+    anim();
+    src.onended=()=>{if(trimPreviewSrc===src){trimPreviewSrc=null;playhead.style.opacity='0';}};
+  };
+  btnReset.onclick=()=>{selStart=0;selEnd=dur;paint();};
+
+  // 자르기 적용
+  btnApply.onclick=async()=>{
+    if(selEnd-selStart<0.05){toast('선택 구간이 너무 짧습니다');return;}
+    if(selStart<=0.001&&selEnd>=dur-0.001){toast('전체 구간이라 자를 필요가 없어요');return;}
+    btnApply.disabled=true;btnApply.textContent='자르는 중…';
+    try{
+      const trimmed=sliceBuffer(buf,selStart,selEnd);
+      const wav=encodeWAV(trimmed);
+      const newId=uid();await dbPut('audio',{id:newId,data:wav});
+      // 캐시 갱신
+      delete bufferCache[pad.audioId];
+      if(pad.audioId)await dbDel('audio',pad.audioId).catch(()=>{});
+      pad.audioId=newId;pad.dur=trimmed.duration;bufferCache[newId]=trimmed;
+      await saveSet();
+      toast('잘랐습니다. 새 구간으로 저장됨');
+      closeOverlays();openPadEditor(editIdx); // 새 파형으로 다시 열기
+    }catch(e){toast('자르기에 실패했습니다');btnApply.disabled=false;btnApply.textContent='✂ 이 구간으로 자르기';}
+  };
+}
+/* AudioBuffer 구간 잘라 새 버퍼 */
+function sliceBuffer(buf,startSec,endSec){
+  const sr=buf.sampleRate;
+  const startF=Math.floor(startSec*sr),endF=Math.floor(endSec*sr);
+  const len=endF-startF;const ch=buf.numberOfChannels;
+  const out=ac.createBuffer(ch,len,sr);
+  for(let c=0;c<ch;c++){
+    const src=buf.getChannelData(c);const dst=out.getChannelData(c);
+    for(let i=0;i<len;i++)dst[i]=src[startF+i]||0;
+  }
+  return out;
+}
+/* AudioBuffer → WAV(ArrayBuffer) 16bit PCM */
+function encodeWAV(buf){
+  const ch=buf.numberOfChannels,sr=buf.sampleRate,len=buf.length;
+  const bytesPerSample=2,blockAlign=ch*bytesPerSample;
+  const dataSize=len*blockAlign;const bufferSize=44+dataSize;
+  const ab=new ArrayBuffer(bufferSize);const view=new DataView(ab);
+  const wr=(off,str)=>{for(let i=0;i<str.length;i++)view.setUint8(off+i,str.charCodeAt(i));};
+  wr(0,'RIFF');view.setUint32(4,36+dataSize,true);wr(8,'WAVE');
+  wr(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);
+  view.setUint16(22,ch,true);view.setUint32(24,sr,true);
+  view.setUint32(28,sr*blockAlign,true);view.setUint16(32,blockAlign,true);view.setUint16(34,16,true);
+  wr(36,'data');view.setUint32(40,dataSize,true);
+  // 인터리브 + 16bit 변환
+  let off=44;
+  const chans=[];for(let c=0;c<ch;c++)chans.push(buf.getChannelData(c));
+  for(let i=0;i<len;i++){
+    for(let c=0;c<ch;c++){
+      let s=Math.max(-1,Math.min(1,chans[c][i]));
+      view.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2;
+    }
+  }
+  return ab;
+}
 async function addSet(){
   const name=prompt('새 세트 이름','세트 '+(state.sets.length+1));if(!name)return;
   const s=newSetObj(name.trim());state.sets.push(s);await dbPut('sets',s);
@@ -917,7 +1081,10 @@ document.getElementById('gFontApply').onclick=async()=>{
 
 /* ================= UI 글루 ================= */
 function show(id){document.getElementById(id).classList.add('show');}
-function closeOverlays(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'));}
+function closeOverlays(){
+  if(trimPreviewSrc){try{trimPreviewSrc.stop()}catch(e){}trimPreviewSrc=null;}
+  document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'));
+}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeOverlays();}));
 document.addEventListener('click',e=>{if(e.target.matches('[data-close]'))closeOverlays();});
 let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');
