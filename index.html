@@ -362,7 +362,7 @@
   </div>
 </div>
 
-<input type="file" id="filePicker" accept="audio/*" class="hidden">
+<input type="file" id="filePicker" accept=".mp3,.wav,.m4a,.aac,.ogg,.oga,.opus,.flac,.caf,.aif,.aiff,.mp4,.webm,audio/*" class="hidden">
 <input type="file" id="setImporter" accept="application/json,.json" class="hidden">
 <div class="toast" id="toast"></div>
 
@@ -605,7 +605,7 @@ function openInputChooser(idx){
     <h2>음원 추가</h2><p class="sub">패드 ${idx+1}번 · 입력 방식을 선택하세요</p>
     <div class="inputcard tappable" data-m="file">
       <div class="ic-head"><span class="ic-icon">📁</span><span class="ic-title">파일 불러오기</span><span class="badge ok">모든 기기</span></div>
-      <p class="ic-desc">mp3·wav·m4a 파일을 그대로 패드에 저장합니다. 가장 안정적이며 한번 넣으면 오프라인에서도 재생됩니다.</p>
+      <p class="ic-desc">mp3·m4a·wav·aac·flac 등 다양한 형식을 지원합니다. 아이폰에서는 파일 선택 창에서 '찾아보기'로 파일 앱·아이클라우드의 음원도 가져올 수 있어요. 한번 넣으면 오프라인에서도 재생됩니다.</p>
     </div>
     <div class="inputcard ${sys.ok?'tappable':'disabled'}" data-m="${sys.ok?'system':''}">
       <div class="ic-head"><span class="ic-icon">🖥</span><span class="ic-title">시스템 오디오 녹음</span>${badge(sys)}</div>
@@ -629,10 +629,24 @@ function openInputChooser(idx){
 function pickFile(){const fp=document.getElementById('filePicker');fp.value='';fp.click();}
 document.getElementById('filePicker').onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
-  const ab=await f.arrayBuffer();
-  const audioId=uid();await dbPut('audio',{id:audioId,data:ab});
-  const name=f.name.replace(/\.[^.]+$/,'').slice(0,24);
-  await assignPad(pendingIdx,audioId,name);
+  toast('음원 불러오는 중…');
+  try{
+    const ab=await f.arrayBuffer();
+    // 이 기기에서 재생 가능한지 먼저 확인(디코딩 테스트)
+    await ensureCtx();
+    let buf;
+    try{buf=await ac.decodeAudioData(ab.slice(0));}
+    catch(err){
+      toast('이 기기에서 재생할 수 없는 형식이에요 (mp3·m4a·wav 권장)');
+      return;
+    }
+    const audioId=uid();await dbPut('audio',{id:audioId,data:ab});
+    bufferCache[audioId]=buf;
+    const name=f.name.replace(/\.[^.]+$/,'').slice(0,24);
+    await assignPad(pendingIdx,audioId,name);
+  }catch(err){
+    toast('파일을 불러오지 못했습니다');
+  }
 };
 
 /* ---- 녹음 공통 ---- */
