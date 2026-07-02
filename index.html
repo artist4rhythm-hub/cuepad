@@ -69,8 +69,14 @@
   .pad .typetag{position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:800;letter-spacing:.5px;padding:2px 6px;border-radius:5px;text-transform:uppercase;z-index:2;text-shadow:0 1px 0 rgba(0,0,0,.5);}
   .pad.t-bgm .typetag{color:#6fa3e0;background:transparent;}
   .pad.t-sfx .typetag{color:#cfa05a;background:transparent;}
-  .pad .durtag{position:absolute;bottom:8px;right:9px;font-size:10.5px;font-weight:700;color:var(--txt2);
+  .pad .durtag{position:absolute;top:8px;right:9px;font-size:10.5px;font-weight:700;color:var(--txt3);
     background:transparent;text-shadow:0 1px 0 rgba(0,0,0,.5);padding:0;z-index:2;font-variant-numeric:tabular-nums;}
+  .pad .runtime{position:absolute;top:7px;right:9px;font-size:10.5px;font-weight:800;z-index:2;font-variant-numeric:tabular-nums;
+    text-shadow:0 1px 0 rgba(0,0,0,.6);display:none;}
+  .pad.t-bgm .runtime{color:#9cc4ff;}
+  .pad.t-sfx .runtime{color:#ffd48a;}
+  .pad.metering .runtime{display:block;}
+  .pad.metering .durtag{display:none;}
   .pad .padicon{font-size:calc(30px * var(--fs,1) * var(--basefont,1));line-height:1;opacity:.95;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
   .pad .padname{font-size:calc(13.5px * var(--fs,1) * var(--basefont,1));font-weight:700;line-height:1.25;color:var(--txt);max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;z-index:2;text-shadow:0 1px 1px rgba(0,0,0,.6);}
   .pad.t-bgm{background:linear-gradient(150deg,#243246 0%,#1a2333 60%,#131b28 100%);box-shadow:inset 0 1px 0 rgba(150,190,255,.22),inset 0 -3px 7px rgba(0,0,0,.55),0 3px 7px rgba(0,0,0,.45),0 0 0 1px rgba(120,170,255,.12);}
@@ -111,7 +117,7 @@
   .vu-h .vu-label{font-size:11px;color:var(--txt3);font-weight:600;flex-shrink:0;width:28px;}
   .vu-h canvas{flex:1;width:100%;height:16px;background:#0a0d12;border:1px solid #0d1015;border-radius:6px;box-shadow:inset 0 1px 4px rgba(0,0,0,.7);}
   /* 패드 재생 레벨 미터 (하단, 진행률 위) */
-  .pad .padmeter{position:absolute;left:6px;right:6px;bottom:4px;height:5px;background:rgba(0,0,0,.35);border-radius:3px;z-index:3;overflow:hidden;opacity:0;transition:opacity .25s;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);}
+  .pad .padmeter{position:absolute;left:7px;right:7px;bottom:6px;height:6px;background:rgba(0,0,0,.4);border-radius:3px;z-index:3;overflow:hidden;opacity:0;transition:opacity .25s;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);}
   .pad.metering .padmeter{opacity:1;}
   .pad .padmeter .fill{height:100%;width:0;border-radius:3px;transition:width .06s linear;box-shadow:0 0 6px currentColor;}
   .pad.t-bgm .padmeter .fill{background:linear-gradient(90deg,#22c55e,#3b82f6);color:#3b82f6;}
@@ -445,7 +451,7 @@ async function playPad(pad,padEl){
     src.connect(g);g.connect(an);an.connect(bgmGain);
     src.start();
     g.gain.linearRampToValueAtTime(pad.vol??1,ac.currentTime+fade);
-    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fade,analyser:an};
+    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fade,analyser:an,startAt:ac.currentTime,dur:buf.duration,loop:src.loop};
     src.onended=()=>{if(currentBGM&&currentBGM.src===src){currentBGM=null;refreshBgmBar();paintPlaying();}};
     refreshBgmBar();paintPlaying();
   }else{
@@ -461,7 +467,7 @@ async function playPad(pad,padEl){
     const g=ac.createGain();g.gain.value=pad.vol??1;
     const an=ac.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.5;
     src.connect(g);g.connect(an);an.connect(masterGain);
-    const obj={padId:pad.id,src,analyser:an};activeSFX.add(obj);
+    const obj={padId:pad.id,src,analyser:an,startAt:ac.currentTime,dur:buf.duration};activeSFX.add(obj);
     src.start();
     flashPad(padEl,buf.duration);
     src.onended=()=>{activeSFX.delete(obj);};
@@ -535,13 +541,14 @@ function renderGrid(){
       el.classList.add(pad.type==='bgm'?'t-bgm':'t-sfx');
       el.style.background=shade(pad.color||(pad.type==='bgm'?'#3b82f6':'#f59e0b'));
       el.style.setProperty('--fs',(pad.fontScale||1));
-      const durTxt=fmtDur(pad.dur);
+      const durTxt=(pad.dur&&pad.dur>0)?fmtDur(pad.dur):'';
       el.innerHTML=`<span class="typetag">${pad.type==='bgm'?'BGM':'SFX'}</span>
         ${durTxt?`<span class="durtag">${durTxt}</span>`:''}
+        <span class="runtime"></span>
         <span class="padicon">${pad.icon||'🎵'}</span>
         <span class="padname">${esc(pad.name)}</span>
-        <span class="progress"></span>
         <span class="padmeter"><span class="fill"></span></span>
+        <span class="progress"></span>
         <span class="editdot">✎</span>
         <span class="ripple"></span>`;
       attachPadHandlers(el,pad,i);
@@ -639,19 +646,29 @@ function updatePadMeters(){
   document.querySelectorAll('.pad').forEach(el=>{
     const idx=el.dataset.idx;
     const pad=s.pads[idx];if(!pad)return;
-    let lvl=0,active=false;
+    let lvl=0,active=false,runObj=null;
     if(pad.type==='bgm'){
-      if(currentBGM&&currentBGM.padId===pad.id){lvl=analyserLevel(currentBGM.analyser);active=true;}
+      if(currentBGM&&currentBGM.padId===pad.id){lvl=analyserLevel(currentBGM.analyser);active=true;runObj=currentBGM;}
     }else{
-      activeSFX.forEach(o=>{if(o.padId===pad.id){const l=analyserLevel(o.analyser);if(l>lvl)lvl=l;active=true;}});
+      // 같은 패드 여러 개면 가장 최근 시작한 것 기준으로 러닝타임
+      activeSFX.forEach(o=>{if(o.padId===pad.id){const l=analyserLevel(o.analyser);if(l>lvl)lvl=l;active=true;
+        if(!runObj||o.startAt>runObj.startAt)runObj=o;}});
     }
-    // 감쇠: 새 값이 크면 즉시 반영, 작아지면 서서히 내림 (짧은 효과음도 눈에 보이게)
+    // 감쇠
     const prev=padMeterLvl[idx]||0;
     const shown=lvl>prev?lvl:Math.max(lvl,prev-0.06);
     padMeterLvl[idx]=shown;
     if(active||shown>0.02){
       el.classList.add('metering');
       const fill=el.querySelector('.padmeter .fill');if(fill)fill.style.width=(shown*100)+'%';
+      // 러닝타임 표시
+      const rt=el.querySelector('.runtime');
+      if(rt&&runObj){
+        let elapsed=ac.currentTime-runObj.startAt;
+        if(runObj.loop&&runObj.dur){elapsed=elapsed%runObj.dur;}  // 루프면 순환
+        elapsed=Math.max(0,elapsed);
+        rt.textContent=fmtDur(elapsed);
+      }
     }else{
       el.classList.remove('metering');padMeterLvl[idx]=0;
     }
@@ -877,8 +894,8 @@ async function assignPad(idx,audioId,name){
   openPadEditor(idx,true);
 }
 function fmtDur(sec){
-  if(!sec||!isFinite(sec))return '';
-  sec=Math.round(sec);const m=Math.floor(sec/60),s=sec%60;
+  if(sec==null||!isFinite(sec))return '';
+  sec=Math.max(0,Math.round(sec));const m=Math.floor(sec/60),s=sec%60;
   return m+':'+String(s).padStart(2,'0');
 }
 
