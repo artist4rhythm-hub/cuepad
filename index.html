@@ -101,19 +101,21 @@
   @keyframes editpulse{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 1.5px var(--bgm),0 0 20px var(--bgm-glow);}}
 
   /* ===== 하단 바 ===== */
-  .bottombar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--metal-bar);border-top:1px solid #0d1015;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 -2px 6px rgba(0,0,0,.4);flex-shrink:0;}
+  .bottombar{display:flex;flex-direction:column;gap:9px;padding:10px 14px;background:var(--metal-bar);border-top:1px solid #0d1015;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 -2px 6px rgba(0,0,0,.4);flex-shrink:0;}
+  .bottom-row{display:flex;align-items:center;gap:12px;}
   .bottombar .master{flex:1;display:flex;align-items:center;gap:9px;font-size:12px;color:var(--txt2);}
   .bottombar input[type=range]{flex:1;}
   .panic{padding:11px 17px;border-radius:10px;background:linear-gradient(180deg,#f25555,#c93030);border:1px solid #8f1f1f;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 5px rgba(0,0,0,.5);}
   .panic:active{transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.4);}
-  .vu{flex-shrink:0;background:#0a0d12;border:1px solid #0d1015;border-radius:7px;padding:4px 5px;box-shadow:inset 0 1px 4px rgba(0,0,0,.7);}
-  .vu canvas{display:block;height:52px;width:24px;}
-  /* 패드 재생 레벨 미터 (상단) */
-  .pad .padmeter{position:absolute;left:0;top:0;width:100%;height:4px;background:transparent;z-index:2;overflow:hidden;opacity:0;transition:opacity .2s;}
+  .vu-h{display:flex;align-items:center;gap:8px;}
+  .vu-h .vu-label{font-size:11px;color:var(--txt3);font-weight:600;flex-shrink:0;width:28px;}
+  .vu-h canvas{flex:1;width:100%;height:16px;background:#0a0d12;border:1px solid #0d1015;border-radius:6px;box-shadow:inset 0 1px 4px rgba(0,0,0,.7);}
+  /* 패드 재생 레벨 미터 (하단, 진행률 위) */
+  .pad .padmeter{position:absolute;left:6px;right:6px;bottom:4px;height:5px;background:rgba(0,0,0,.35);border-radius:3px;z-index:3;overflow:hidden;opacity:0;transition:opacity .25s;box-shadow:inset 0 1px 2px rgba(0,0,0,.5);}
   .pad.metering .padmeter{opacity:1;}
-  .pad .padmeter .fill{height:100%;width:0;transition:width .05s linear;}
-  .pad.t-bgm .padmeter .fill{background:linear-gradient(90deg,#22c55e,#3b82f6);}
-  .pad.t-sfx .padmeter .fill{background:linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);}
+  .pad .padmeter .fill{height:100%;width:0;border-radius:3px;transition:width .06s linear;box-shadow:0 0 6px currentColor;}
+  .pad.t-bgm .padmeter .fill{background:linear-gradient(90deg,#22c55e,#3b82f6);color:#3b82f6;}
+  .pad.t-sfx .padmeter .fill{background:linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);color:#f59e0b;}
 
   input[type=range]{-webkit-appearance:none;appearance:none;height:5px;background:#12161c;border-radius:3px;outline:none;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:linear-gradient(180deg,#e8edf5,#aab4c2);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.6);}
@@ -289,14 +291,17 @@
 </div>
 
 <div class="bottombar">
-  <div class="master">
-    <span>전체 볼륨</span>
-    <input type="range" id="masterVol" min="0" max="100" value="100">
+  <div class="vu-h" id="masterVU" title="출력 레벨">
+    <span class="vu-label">출력</span>
+    <canvas id="vuCanvas" width="400" height="16"></canvas>
   </div>
-  <div class="vu" id="masterVU" title="출력 레벨">
-    <canvas id="vuCanvas" width="24" height="60"></canvas>
+  <div class="bottom-row">
+    <div class="master">
+      <span>전체 볼륨</span>
+      <input type="range" id="masterVol" min="0" max="100" value="100">
+    </div>
+    <button class="panic" id="panicBtn">■ 전체 정지</button>
   </div>
-  <button class="panic" id="panicBtn">■ 전체 정지</button>
 </div>
 
 <!-- 메뉴 시트 -->
@@ -605,46 +610,50 @@ function drawMasterVU(){
   const canvas=document.getElementById('vuCanvas');if(!canvas)return;
   const ctx=canvas.getContext('2d');const W=canvas.width,H=canvas.height;
   const level=analyserLevel(masterAnalyser);
-  // 스테레오 분리가 없으므로 좌우 동일값에 미세 차이만
   const L=level,R=level;
-  vuPeakL=Math.max(L,vuPeakL-0.02);vuPeakR=Math.max(R,vuPeakR-0.02);
+  vuPeakL=Math.max(L,vuPeakL-0.015);vuPeakR=Math.max(R,vuPeakR-0.015);
   ctx.clearRect(0,0,W,H);
-  const segs=14,gap=1.5,colW=(W-4)/2;
-  [[2,L,vuPeakL],[2+colW,R,vuPeakR]].forEach(([x,val,peak])=>{
-    const segH=(H-(segs-1)*gap)/segs;
+  const segs=28,gap=2;
+  const rowH=(H-3)/2;   // 위/아래 2줄(L, R)
+  [[1,L,vuPeakL],[1+rowH+1,R,vuPeakR]].forEach(([y,val,peak])=>{
+    const segW=(W-(segs-1)*gap)/segs;
     for(let i=0;i<segs;i++){
       const frac=(i+1)/segs;
-      const y=H-(i+1)*segH-i*gap;
+      const x=i*(segW+gap);
       const on=val>=frac-0.001;
-      // 색: 하위 초록, 중위 노랑, 상위 빨강
       let col;
       if(frac>0.85)col=on?'#ef4444':'#3a1717';
       else if(frac>0.6)col=on?'#f59e0b':'#3a2f14';
-      else col=on?'#22c55e':'#16321f';
+      else col=on?'#22c55e':'#14301d';
       ctx.fillStyle=col;
-      ctx.fillRect(x,y,colW-1,segH);
+      ctx.fillRect(x,y,segW,rowH);
     }
-    // 피크 홀드 선
-    const py=H-Math.min(1,peak)*H;
-    ctx.fillStyle='#fff';ctx.fillRect(x,Math.max(0,py-1),colW-1,1.5);
+    // 피크 홀드 (세로 흰 선)
+    const px=Math.min(1,peak)*W;
+    ctx.fillStyle='#fff';ctx.fillRect(Math.min(W-1.5,px),y,1.5,rowH);
   });
 }
+const padMeterLvl={};  // idx -> 표시 레벨(감쇠용)
 function updatePadMeters(){
   const s=activeSet();
   document.querySelectorAll('.pad').forEach(el=>{
-    const pad=s.pads[el.dataset.idx];if(!pad)return;
+    const idx=el.dataset.idx;
+    const pad=s.pads[idx];if(!pad)return;
     let lvl=0,active=false;
     if(pad.type==='bgm'){
       if(currentBGM&&currentBGM.padId===pad.id){lvl=analyserLevel(currentBGM.analyser);active=true;}
     }else{
-      // 같은 패드의 여러 효과음 중 최대 레벨
       activeSFX.forEach(o=>{if(o.padId===pad.id){const l=analyserLevel(o.analyser);if(l>lvl)lvl=l;active=true;}});
     }
-    if(active){
+    // 감쇠: 새 값이 크면 즉시 반영, 작아지면 서서히 내림 (짧은 효과음도 눈에 보이게)
+    const prev=padMeterLvl[idx]||0;
+    const shown=lvl>prev?lvl:Math.max(lvl,prev-0.06);
+    padMeterLvl[idx]=shown;
+    if(active||shown>0.02){
       el.classList.add('metering');
-      const fill=el.querySelector('.padmeter .fill');if(fill)fill.style.width=(lvl*100)+'%';
+      const fill=el.querySelector('.padmeter .fill');if(fill)fill.style.width=(shown*100)+'%';
     }else{
-      el.classList.remove('metering');
+      el.classList.remove('metering');padMeterLvl[idx]=0;
     }
   });
 }
