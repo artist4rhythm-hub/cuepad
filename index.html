@@ -106,6 +106,14 @@
   .bottombar input[type=range]{flex:1;}
   .panic{padding:11px 17px;border-radius:10px;background:linear-gradient(180deg,#f25555,#c93030);border:1px solid #8f1f1f;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 5px rgba(0,0,0,.5);}
   .panic:active{transform:translateY(1px);box-shadow:inset 0 2px 5px rgba(0,0,0,.4);}
+  .vu{flex-shrink:0;background:#0a0d12;border:1px solid #0d1015;border-radius:7px;padding:4px 5px;box-shadow:inset 0 1px 4px rgba(0,0,0,.7);}
+  .vu canvas{display:block;height:52px;width:24px;}
+  /* 패드 재생 레벨 미터 (상단) */
+  .pad .padmeter{position:absolute;left:0;top:0;width:100%;height:4px;background:transparent;z-index:2;overflow:hidden;opacity:0;transition:opacity .2s;}
+  .pad.metering .padmeter{opacity:1;}
+  .pad .padmeter .fill{height:100%;width:0;transition:width .05s linear;}
+  .pad.t-bgm .padmeter .fill{background:linear-gradient(90deg,#22c55e,#3b82f6);}
+  .pad.t-sfx .padmeter .fill{background:linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);}
 
   input[type=range]{-webkit-appearance:none;appearance:none;height:5px;background:#12161c;border-radius:3px;outline:none;box-shadow:inset 0 1px 2px rgba(0,0,0,.6);}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:linear-gradient(180deg,#e8edf5,#aab4c2);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.6);}
@@ -285,6 +293,9 @@
     <span>전체 볼륨</span>
     <input type="range" id="masterVol" min="0" max="100" value="100">
   </div>
+  <div class="vu" id="masterVU" title="출력 레벨">
+    <canvas id="vuCanvas" width="24" height="60"></canvas>
+  </div>
   <button class="panic" id="panicBtn">■ 전체 정지</button>
 </div>
 
@@ -394,10 +405,12 @@ async function metaSet(k,v){await dbPut('meta',{k,v});}
 /* ================= 오디오 엔진 ================= */
 const AudioCtx=window.AudioContext||window.webkitAudioContext;
 let ac=new AudioCtx();
-let masterGain=ac.createGain();masterGain.connect(ac.destination);
+let masterGain=ac.createGain();
+let masterAnalyser=ac.createAnalyser();masterAnalyser.fftSize=1024;masterAnalyser.smoothingTimeConstant=0.6;
+masterGain.connect(masterAnalyser);masterAnalyser.connect(ac.destination);
 let bgmGain=ac.createGain();bgmGain.connect(masterGain);
 const bufferCache={};            // audioId -> AudioBuffer
-let currentBGM=null;             // {padId, src, gain, name}
+let currentBGM=null;             // {padId, src, gain, name, analyser}
 const activeSFX=new Set();       // 동시 재생 효과음 추적
 
 async function ensureCtx(){if(ac.state==='suspended')await ac.resume();}
@@ -423,10 +436,11 @@ async function playPad(pad,padEl){
     if(currentBGM)stopBGM(fade);
     const src=ac.createBufferSource();src.buffer=buf;src.loop=pad.loop!==false;
     const g=ac.createGain();g.gain.value=0;
-    src.connect(g);g.connect(bgmGain);
+    const an=ac.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.5;
+    src.connect(g);g.connect(an);an.connect(bgmGain);
     src.start();
     g.gain.linearRampToValueAtTime(pad.vol??1,ac.currentTime+fade);
-    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fade};
+    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fade,analyser:an};
     src.onended=()=>{if(currentBGM&&currentBGM.src===src){currentBGM=null;refreshBgmBar();paintPlaying();}};
     refreshBgmBar();paintPlaying();
   }else{
@@ -440,8 +454,9 @@ async function playPad(pad,padEl){
     }
     const src=ac.createBufferSource();src.buffer=buf;
     const g=ac.createGain();g.gain.value=pad.vol??1;
-    src.connect(g);g.connect(masterGain);
-    const obj={padId:pad.id,src};activeSFX.add(obj);
+    const an=ac.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.5;
+    src.connect(g);g.connect(an);an.connect(masterGain);
+    const obj={padId:pad.id,src,analyser:an};activeSFX.add(obj);
     src.start();
     flashPad(padEl,buf.duration);
     src.onended=()=>{activeSFX.delete(obj);};
@@ -521,6 +536,7 @@ function renderGrid(){
         <span class="padicon">${pad.icon||'🎵'}</span>
         <span class="padname">${esc(pad.name)}</span>
         <span class="progress"></span>
+        <span class="padmeter"><span class="fill"></span></span>
         <span class="editdot">✎</span>
         <span class="ripple"></span>`;
       attachPadHandlers(el,pad,i);
@@ -575,6 +591,69 @@ function refreshBgmBar(){
   else{bar.classList.remove('playing');now.textContent='재생 중인 배경음악 없음';}
 }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ================= 레벨 미터 ================= */
+function analyserLevel(an){
+  if(!an)return 0;
+  const buf=new Uint8Array(an.fftSize);
+  an.getByteTimeDomainData(buf);
+  let sum=0;for(let i=0;i<buf.length;i++){const v=(buf[i]-128)/128;sum+=v*v;}
+  return Math.min(1,Math.sqrt(sum/buf.length)*2.6); // RMS → 0~1
+}
+let vuPeakL=0,vuPeakR=0;
+function drawMasterVU(){
+  const canvas=document.getElementById('vuCanvas');if(!canvas)return;
+  const ctx=canvas.getContext('2d');const W=canvas.width,H=canvas.height;
+  const level=analyserLevel(masterAnalyser);
+  // 스테레오 분리가 없으므로 좌우 동일값에 미세 차이만
+  const L=level,R=level;
+  vuPeakL=Math.max(L,vuPeakL-0.02);vuPeakR=Math.max(R,vuPeakR-0.02);
+  ctx.clearRect(0,0,W,H);
+  const segs=14,gap=1.5,colW=(W-4)/2;
+  [[2,L,vuPeakL],[2+colW,R,vuPeakR]].forEach(([x,val,peak])=>{
+    const segH=(H-(segs-1)*gap)/segs;
+    for(let i=0;i<segs;i++){
+      const frac=(i+1)/segs;
+      const y=H-(i+1)*segH-i*gap;
+      const on=val>=frac-0.001;
+      // 색: 하위 초록, 중위 노랑, 상위 빨강
+      let col;
+      if(frac>0.85)col=on?'#ef4444':'#3a1717';
+      else if(frac>0.6)col=on?'#f59e0b':'#3a2f14';
+      else col=on?'#22c55e':'#16321f';
+      ctx.fillStyle=col;
+      ctx.fillRect(x,y,colW-1,segH);
+    }
+    // 피크 홀드 선
+    const py=H-Math.min(1,peak)*H;
+    ctx.fillStyle='#fff';ctx.fillRect(x,Math.max(0,py-1),colW-1,1.5);
+  });
+}
+function updatePadMeters(){
+  const s=activeSet();
+  document.querySelectorAll('.pad').forEach(el=>{
+    const pad=s.pads[el.dataset.idx];if(!pad)return;
+    let lvl=0,active=false;
+    if(pad.type==='bgm'){
+      if(currentBGM&&currentBGM.padId===pad.id){lvl=analyserLevel(currentBGM.analyser);active=true;}
+    }else{
+      // 같은 패드의 여러 효과음 중 최대 레벨
+      activeSFX.forEach(o=>{if(o.padId===pad.id){const l=analyserLevel(o.analyser);if(l>lvl)lvl=l;active=true;}});
+    }
+    if(active){
+      el.classList.add('metering');
+      const fill=el.querySelector('.padmeter .fill');if(fill)fill.style.width=(lvl*100)+'%';
+    }else{
+      el.classList.remove('metering');
+    }
+  });
+}
+let meterRAF=null;
+function meterLoop(){
+  drawMasterVU();
+  updatePadMeters();
+  meterRAF=requestAnimationFrame(meterLoop);
+}
 
 /* ================= 입력 방식 선택 ================= */
 let pendingIdx=null;
@@ -1329,6 +1408,7 @@ function showWelcomeAgain(){
   const m=await metaGet('master',100),b=await metaGet('bgmvol',80);
   mv.value=m;bv.value=b;setMaster(m/100);setBgmVol(b/100);
   render();
+  meterLoop();
   await maybeShowWelcome();
   document.body.addEventListener('pointerdown',()=>ensureCtx(),{once:true});
   if('serviceWorker' in navigator){
