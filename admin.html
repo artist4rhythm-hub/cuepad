@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0c10">
+<title>DA cue pad — 관리자</title>
+<style>
+  :root{
+    --bg:#0a0c10; --panel:#222831; --panel2:#2a313c; --line:#363d49; --line2:#454e5c;
+    --txt:#e8edf5; --txt2:#9aa6b6; --txt3:#67707e;
+    --accent:#ffb84d; --accent2:#ff6b4a; --ok:#22c55e;
+    --metal:linear-gradient(160deg,#2a2f38 0%,#1a1e25 45%,#22272f 100%);
+    --metal-bar:linear-gradient(180deg,#262b33 0%,#1b2027 100%);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;min-height:100%;background:#0a0c10;background-image:radial-gradient(ellipse at 50% -10%,#161b22 0%,#0a0c10 60%);color:var(--txt);font-family:var(--font);}
+  button{font-family:inherit;cursor:pointer;color:inherit;}
+  .topbar{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--metal-bar);border-bottom:1px solid #0d1015;box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}
+  .topbar img{width:32px;height:32px;border-radius:9px;}
+  .topbar h1{font-size:17px;margin:0;font-weight:800;letter-spacing:.5px;color:#cdd6e2;}
+  .topbar .spacer{flex:1;}
+  .topbar .who{font-size:12px;color:var(--txt2);}
+  .btn{padding:9px 16px;border-radius:10px;border:1px solid #1d4ea0;font-size:14px;font-weight:700;background:linear-gradient(180deg,#4a90f0,#2f6fd0);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 5px rgba(0,0,0,.4);}
+  .btn:active{transform:translateY(1px);}
+  .btn.ghost{background:linear-gradient(180deg,#2b313b,#212630);border:1px solid #0d1015;color:var(--txt);}
+  .btn.warm{background:linear-gradient(180deg,#ffb84d,#e8921f);border-color:#9a6010;color:#241704;}
+
+  .wrap{max-width:960px;margin:0 auto;padding:22px 18px 60px;}
+
+  /* 로그인 화면 */
+  .login{max-width:400px;margin:70px auto;text-align:center;padding:0 20px;}
+  .login img{width:96px;height:96px;border-radius:24px;margin-bottom:18px;box-shadow:0 10px 30px rgba(0,0,0,.5);}
+  .login h2{margin:0 0 8px;font-size:22px;}
+  .login p{color:var(--txt2);font-size:14px;margin:0 0 24px;line-height:1.6;}
+  .g-btn{display:inline-flex;align-items:center;gap:10px;padding:12px 22px;border-radius:12px;background:#fff;color:#1a1a1a;border:none;font-size:15px;font-weight:600;box-shadow:0 3px 10px rgba(0,0,0,.4);}
+  .g-btn:active{transform:translateY(1px);}
+  .g-btn svg{width:20px;height:20px;}
+  .err{color:#ff9b9b;font-size:13px;margin-top:16px;}
+
+  /* 탭 */
+  .tabs{display:flex;gap:4px;background:#12161c;border:1px solid #0d1015;border-radius:11px;padding:4px;margin-bottom:20px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);width:fit-content;}
+  .tabs button{padding:9px 20px;border:none;background:transparent;border-radius:8px;font-size:14px;font-weight:700;color:var(--txt2);}
+  .tabs button.active{background:linear-gradient(180deg,#ffb84d,#e8921f);color:#241704;box-shadow:inset 0 1px 0 rgba(255,255,255,.4);}
+
+  /* 통계 카드 */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px;}
+  .card{background:var(--metal);border:1px solid #0d1015;border-radius:15px;padding:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 3px 10px rgba(0,0,0,.4);}
+  .card .label{font-size:12px;color:var(--txt2);margin-bottom:8px;font-weight:600;}
+  .card .num{font-size:32px;font-weight:800;letter-spacing:.5px;color:#ffce8a;font-variant-numeric:tabular-nums;text-shadow:0 0 16px rgba(255,184,77,.3);}
+  .card .sub{font-size:11px;color:var(--txt3);margin-top:4px;}
+
+  .section{background:var(--metal);border:1px solid #0d1015;border-radius:15px;padding:18px;margin-bottom:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 3px 10px rgba(0,0,0,.4);}
+  .section h3{margin:0 0 14px;font-size:15px;color:#cdd6e2;}
+  .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px;}
+  .bar-row .bname{width:80px;flex-shrink:0;color:var(--txt2);}
+  .bar-track{flex:1;height:16px;background:#12161c;border-radius:8px;overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .bar-fill{height:100%;background:linear-gradient(90deg,#ffd9a0,#ffb84d,#ff6b4a);border-radius:8px;transition:width .5s;}
+  .bar-row .bval{width:44px;text-align:right;font-variant-numeric:tabular-nums;color:var(--txt);font-weight:700;}
+
+  /* 추이 차트 */
+  .trend{display:flex;align-items:flex-end;gap:5px;height:120px;padding-top:10px;}
+  .trend .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;}
+  .trend .col .barv{width:70%;max-width:26px;background:linear-gradient(180deg,#ffb84d,#e8921f);border-radius:4px 4px 0 0;min-height:2px;box-shadow:0 0 8px rgba(255,184,77,.25);}
+  .trend .col .d{font-size:9px;color:var(--txt3);white-space:nowrap;transform:rotate(-45deg);transform-origin:center;margin-top:6px;}
+  .trend .col .cv{font-size:10px;color:var(--txt2);font-weight:700;}
+
+  /* 메시지 */
+  .msg{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+  .msg.unread{border-color:var(--accent);box-shadow:0 0 0 1px rgba(255,184,77,.3),0 2px 6px rgba(0,0,0,.3);}
+  .msg .mhead{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  .msg .mname{font-weight:800;font-size:15px;}
+  .msg .mtag{font-size:11px;color:var(--txt2);background:#12161c;padding:2px 8px;border-radius:6px;}
+  .msg .mtime{font-size:11px;color:var(--txt3);margin-left:auto;}
+  .msg .mbody{font-size:14px;line-height:1.6;color:var(--txt);white-space:pre-wrap;word-break:break-word;}
+  .msg .newdot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .empty{text-align:center;padding:50px 20px;color:var(--txt3);}
+  .empty .ei{font-size:44px;opacity:.4;margin-bottom:10px;}
+  .loading{text-align:center;padding:40px;color:var(--txt2);}
+  .hidden{display:none!important;}
+  .refresh{font-size:12px;color:var(--txt2);background:none;border:1px solid var(--line);padding:6px 12px;border-radius:8px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <img src="icon-192.png" alt="">
+  <h1>DA cue pad 관리자</h1>
+  <div class="spacer"></div>
+  <span class="who hidden" id="who"></span>
+  <button class="btn ghost hidden" id="logoutBtn" style="font-size:13px;padding:8px 14px;">로그아웃</button>
+</div>
+
+<!-- 로그인 -->
+<div class="login" id="loginView">
+  <img src="icon-512.png" alt="">
+  <h2>관리자 로그인</h2>
+  <p>통계와 메시지를 확인하려면<br>관리자 구글 계정으로 로그인하세요.</p>
+  <button class="g-btn" id="googleBtn">
+    <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.6 2.4 30.1 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.2 13.7 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9.1h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.1-3.8 6.5-9.5 6.5-16z"/><path fill="#FBBC05" d="M10.4 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.3-4.5 2.1-7.9 2.1-6.4 0-11.8-4.2-13.6-9.9l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg>
+    Google로 로그인
+  </button>
+  <div class="err hidden" id="loginErr"></div>
+</div>
+
+<!-- 대시보드 -->
+<div class="wrap hidden" id="adminView">
+  <div class="tabs">
+    <button data-tab="dash" class="active">통계</button>
+    <button data-tab="msg">메시지함 <span id="unreadBadge"></span></button>
+  </div>
+
+  <div id="dashTab">
+    <div class="cards" id="statCards">
+      <div class="card"><div class="label">총 접속</div><div class="num" id="cVisits">–</div><div class="sub">누적 방문 횟수</div></div>
+      <div class="card"><div class="label">순 방문자</div><div class="num" id="cVisitors">–</div><div class="sub">고유 기기 수</div></div>
+      <div class="card"><div class="label">설치</div><div class="num" id="cInstalls">–</div><div class="sub">홈 화면 추가</div></div>
+      <div class="card"><div class="label">오늘 접속</div><div class="num" id="cToday">–</div><div class="sub" id="cTodayDate"></div></div>
+    </div>
+
+    <div class="section">
+      <h3>기기별 접속 (OS)</h3>
+      <div id="osBars"><div class="loading">불러오는 중…</div></div>
+    </div>
+    <div class="section">
+      <h3>브라우저별 접속</h3>
+      <div id="browserBars"></div>
+    </div>
+    <div class="section">
+      <h3>최근 14일 접속 추이</h3>
+      <div class="trend" id="trendChart"></div>
+    </div>
+    <button class="refresh" id="refreshBtn">↻ 새로고침</button>
+  </div>
+
+  <div id="msgTab" class="hidden">
+    <div id="msgList"><div class="loading">불러오는 중…</div></div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { getFirestore, collection, getDocs, doc, updateDoc, query, orderBy, limit }
+    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBSOFWaStvmiICiFK4Bfx7J-cVCKWlzMHQ",
+    authDomain: "da-cue-pad.firebaseapp.com",
+    projectId: "da-cue-pad",
+    storageBucket: "da-cue-pad.firebasestorage.app",
+    messagingSenderId: "486082282976",
+    appId: "1:486082282976:web:e8b797ffa15416c30a1785"
+  };
+  const ADMIN_EMAILS = ["artist4rhythm@gmail.com"]; // 관리자 계정
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const $ = id => document.getElementById(id);
+
+  // 로그인
+  $('googleBtn').onclick = async ()=>{
+    try{ await signInWithPopup(auth, new GoogleAuthProvider()); }
+    catch(e){ showErr('로그인에 실패했습니다: '+(e.code||e.message)); }
+  };
+  $('logoutBtn').onclick = ()=> signOut(auth);
+  function showErr(m){ const el=$('loginErr'); el.textContent=m; el.classList.remove('hidden'); }
+
+  onAuthStateChanged(auth, user=>{
+    if(user && ADMIN_EMAILS.includes(user.email)){
+      $('loginView').classList.add('hidden');
+      $('adminView').classList.remove('hidden');
+      $('logoutBtn').classList.remove('hidden');
+      $('who').classList.remove('hidden');
+      $('who').textContent = user.email;
+      loadAll();
+    }else if(user){
+      // 로그인은 됐지만 관리자가 아님
+      signOut(auth);
+      showErr('관리자 계정이 아닙니다: '+user.email);
+    }else{
+      $('loginView').classList.remove('hidden');
+      $('adminView').classList.add('hidden');
+      $('logoutBtn').classList.add('hidden');
+      $('who').classList.add('hidden');
+    }
+  });
+
+  // 탭 전환
+  document.querySelectorAll('.tabs button').forEach(b=>{
+    b.onclick = ()=>{
+      document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));
+      const t=b.dataset.tab;
+      $('dashTab').classList.toggle('hidden', t!=='dash');
+      $('msgTab').classList.toggle('hidden', t!=='msg');
+    };
+  });
+  $('refreshBtn').onclick = loadAll;
+
+  async function loadAll(){ await Promise.all([loadStats(), loadMessages()]); }
+
+  // ===== 통계 =====
+  async function loadStats(){
+    try{
+      const snap = await getDocs(collection(db,'stats_daily'));
+      let visits=0, installs=0;
+      const osAgg={}, brAgg={}, dayAgg={};
+      snap.forEach(d=>{
+        const v=d.data();
+        visits += v.visits||0;
+        installs += v.installs||0;
+        dayAgg[v.date||d.id] = v.visits||0;
+        Object.keys(v).forEach(k=>{
+          if(k.startsWith('os_')) osAgg[k.slice(3)] = (osAgg[k.slice(3)]||0)+(v[k]||0);
+          if(k.startsWith('browser_')) brAgg[k.slice(8)] = (brAgg[k.slice(8)]||0)+(v[k]||0);
+        });
+      });
+      // 순 방문자 수
+      let visitors=0;
+      try{ const vs = await getDocs(collection(db,'visitors')); visitors = vs.size; }catch(e){}
+
+      const today = new Date().toISOString().slice(0,10);
+      $('cVisits').textContent = visits.toLocaleString();
+      $('cVisitors').textContent = visitors.toLocaleString();
+      $('cInstalls').textContent = installs.toLocaleString();
+      $('cToday').textContent = (dayAgg[today]||0).toLocaleString();
+      $('cTodayDate').textContent = today;
+
+      renderBars('osBars', osAgg);
+      renderBars('browserBars', brAgg);
+      renderTrend(dayAgg);
+    }catch(e){
+      $('osBars').innerHTML = '<div class="empty">통계를 불러오지 못했습니다.<br>Firestore 규칙을 확인하세요.</div>';
+    }
+  }
+  function renderBars(elId, agg){
+    const el=$(elId); const entries=Object.entries(agg).sort((a,b)=>b[1]-a[1]);
+    if(!entries.length){ el.innerHTML='<div style="color:var(--txt3);font-size:13px">데이터 없음</div>'; return; }
+    const max=Math.max(...entries.map(e=>e[1]),1);
+    el.innerHTML = entries.map(([k,v])=>`
+      <div class="bar-row"><span class="bname">${k}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${(v/max*100).toFixed(0)}%"></span></span>
+      <span class="bval">${v}</span></div>`).join('');
+  }
+  function renderTrend(dayAgg){
+    const days=[];
+    for(let i=13;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i);
+      days.push(d.toISOString().slice(0,10)); }
+    const max=Math.max(...days.map(d=>dayAgg[d]||0),1);
+    $('trendChart').innerHTML = days.map(d=>{
+      const v=dayAgg[d]||0; const h=(v/max*90);
+      const md=d.slice(5);
+      return `<div class="col"><span class="cv">${v||''}</span>
+        <div class="barv" style="height:${h}px"></div>
+        <span class="d">${md}</span></div>`;
+    }).join('');
+  }
+
+  // ===== 메시지 =====
+  async function loadMessages(){
+    try{
+      const q = query(collection(db,'messages'), orderBy('at','desc'), limit(200));
+      const snap = await getDocs(q);
+      const list=$('msgList');
+      if(snap.empty){ list.innerHTML='<div class="empty"><div class="ei">✉️</div>아직 받은 메시지가 없습니다.</div>';
+        $('unreadBadge').textContent=''; return; }
+      let unread=0; const rows=[];
+      snap.forEach(d=>{
+        const m=d.data(); if(!m.read) unread++;
+        const t = m.at&&m.at.toDate ? m.at.toDate() : null;
+        const ts = t ? `${t.getFullYear()}.${String(t.getMonth()+1).padStart(2,'0')}.${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}` : '';
+        rows.push(`<div class="msg ${m.read?'':'unread'}">
+          <div class="mhead">
+            ${m.read?'':'<span class="newdot"></span>'}
+            <span class="mname">${esc(m.name||'이름없음')}</span>
+            ${m.org?`<span class="mtag">${esc(m.org)}</span>`:''}
+            ${m.phone?`<span class="mtag">${esc(m.phone)}</span>`:''}
+            <span class="mtime">${ts}</span>
+          </div>
+          <div class="mbody">${esc(m.message||'')}</div>
+        </div>`);
+      });
+      list.innerHTML = rows.join('');
+      $('unreadBadge').textContent = unread? `(${unread})` : '';
+
+      // 열람 시 읽음 처리
+      const ids=[]; snap.forEach(d=>{ if(!d.data().read) ids.push(d.id); });
+      for(const id of ids){ updateDoc(doc(db,'messages',id),{read:true}).catch(()=>{}); }
+    }catch(e){
+      $('msgList').innerHTML='<div class="empty">메시지를 불러오지 못했습니다.<br>Firestore 규칙을 확인하세요.</div>';
+    }
+  }
+  function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>
