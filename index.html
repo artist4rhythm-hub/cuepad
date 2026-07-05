@@ -375,13 +375,24 @@
 <div class="overlay" id="contactOverlay">
   <div class="sheet">
     <h2>관리자에게 메시지</h2>
-    <p class="sub">문의나 건의사항을 관리자에게 보냅니다. 보내기를 누르면 메일 앱이 열려요.</p>
+    <p class="sub">문의나 건의사항을 관리자에게 보냅니다. 보내기를 누르면 바로 전달돼요.</p>
     <div class="field"><label>이름</label><input type="text" id="cName" maxlength="30" placeholder="홍길동"></div>
     <div class="field"><label>소속</label><input type="text" id="cOrg" maxlength="40" placeholder="예: 다니엘 아마츠 3반"></div>
     <div class="field"><label>연락처</label><input type="text" id="cPhone" maxlength="30" placeholder="010-0000-0000"></div>
     <div class="field"><label>메시지</label>
       <textarea id="cMsg" maxlength="1000" rows="4" placeholder="내용을 입력하세요" style="width:100%;background:#12161c;border:1px solid #0d1015;color:var(--txt);border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);resize:vertical;"></textarea></div>
-    <button class="btn" id="cSend">✉️ 메일 앱으로 보내기</button>
+    <button class="btn" id="cSend">📨 메시지 보내기</button>
+    <button class="btn ghost sm" style="margin-top:8px" data-close>취소</button>
+  </div>
+</div>
+
+<!-- 세트 내보내기: 파일 이름 입력 시트 -->
+<div class="overlay" id="exportOverlay">
+  <div class="sheet">
+    <h2>세트 내보내기</h2>
+    <p class="sub">저장할 파일 이름을 정해주세요.</p>
+    <div class="field"><label>파일 이름</label><input type="text" id="expName" maxlength="60" placeholder="예: 발표회 1부"></div>
+    <button class="btn" id="expGo">💾 파일로 저장</button>
     <button class="btn ghost sm" style="margin-top:8px" data-close>취소</button>
   </div>
 </div>
@@ -1206,14 +1217,24 @@ async function buildSetFile(){
   const fname=(s.name||'set').replace(/[^\w가-힣 -]/g,'')+'.cuepad.json';
   return {json,fname,name:s.name};
 }
-async function exportSet(){
-  toast('내보내기 준비 중…');
-  const {json,fname}=await buildSetFile();
+function exportSet(){
+  // 파일 이름 입력 시트 열기 (기본값: 세트 이름)
+  const inp=document.getElementById('expName');
+  inp.value=(activeSet().name||'').trim();
+  show('exportOverlay');
+  setTimeout(()=>{try{inp.focus();inp.select();}catch(e){}},250);
+}
+document.getElementById('expGo').onclick=async ()=>{
+  const raw=document.getElementById('expName').value.trim();
+  const base=(raw||activeSet().name||'set').replace(/[^\w가-힣 ._-]/g,'');
+  if(!base){toast('파일 이름을 입력해주세요');return;}
+  closeOverlays();toast('내보내기 준비 중…');
+  const {json}=await buildSetFile();
   const blob=new Blob([json],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download=fname;a.click();
+  a.href=url;a.download=base+'.cuepad.json';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast('세트를 파일로 저장했습니다');
-}
+};
 /* 공유: 메일·메신저 등으로 세트 파일 보내기 */
 async function shareSet(){
   toast('공유 준비 중…');
@@ -1296,19 +1317,25 @@ function openContact(){
   ['cName','cOrg','cPhone','cMsg'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   show('contactOverlay');
 }
-document.getElementById('cSend').onclick=()=>{
+document.getElementById('cSend').onclick=async ()=>{
   const name=document.getElementById('cName').value.trim();
   const org=document.getElementById('cOrg').value.trim();
   const phone=document.getElementById('cPhone').value.trim();
   const msg=document.getElementById('cMsg').value.trim();
   if(!name){toast('이름을 입력해주세요');return;}
   if(!msg){toast('메시지를 입력해주세요');return;}
-  const subject=`[DA cue pad] ${name}님의 메시지`;
-  const body=`이름: ${name}\n소속: ${org||'-'}\n연락처: ${phone||'-'}\n\n[메시지]\n${msg}\n\n---\nDA cue pad에서 보냄`;
-  const url=`mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  closeOverlays();
-  toast('메일 앱을 엽니다');
-  setTimeout(()=>{location.href=url;},300);
+  const btn=document.getElementById('cSend');
+  btn.disabled=true;btn.textContent='보내는 중…';
+  try{
+    if(!window.__saveContactToCloud)throw new Error('offline');
+    await window.__saveContactToCloud({name,org,phone,message:msg});
+    closeOverlays();
+    toast('메시지를 보냈습니다. 감사합니다!');
+  }catch(e){
+    toast('전송에 실패했어요. 인터넷 연결을 확인해주세요');
+  }finally{
+    btn.disabled=false;btn.textContent='📨 메시지 보내기';
+  }
 };
 
 /* ================= UI 글루 ================= */
@@ -1494,6 +1521,71 @@ function showWelcomeAgain(){
     });
   }
 })();
+</script>
+
+<!-- ===== Firebase: 방문 통계 + 관리자 메시지함 (admin.html에서 확인) ===== -->
+<script type="module">
+try{
+  const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+  const { getFirestore, collection, addDoc, doc, setDoc, increment, serverTimestamp } =
+    await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBSOFWaStvmiICiFK4Bfx7J-cVCKWlzMHQ",
+    authDomain: "da-cue-pad.firebaseapp.com",
+    projectId: "da-cue-pad",
+    storageBucket: "da-cue-pad.firebasestorage.app",
+    messagingSenderId: "486082282976",
+    appId: "1:486082282976:web:e8b797ffa15416c30a1785"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  /* 기기·브라우저 판별 */
+  const ua=navigator.userAgent;
+  const os=/iPhone|iPad|iPod/.test(ua)?'iOS':/Android/.test(ua)?'Android':/Mac/.test(ua)?'macOS':/Windows/.test(ua)?'Windows':'기타';
+  const browser=/CriOS|Chrome/.test(ua)&&!/Edg/.test(ua)?'Chrome':/Safari/.test(ua)&&!/Chrome|CriOS/.test(ua)?'Safari':/Edg/.test(ua)?'Edge':/Firefox|FxiOS/.test(ua)?'Firefox':/SamsungBrowser/.test(ua)?'Samsung':'기타';
+  const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+
+  /* 순 방문자 ID (localStorage) */
+  let vid=localStorage.getItem('cuepad_vid');
+  if(!vid){vid='v_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);localStorage.setItem('cuepad_vid',vid);}
+  const todayKey=new Date().toISOString().slice(0,10);
+  const isNewVisitor=!localStorage.getItem('cuepad_seen');
+  localStorage.setItem('cuepad_seen','1');
+
+  /* 1) 방문 기록 */
+  addDoc(collection(db,'visits'),{
+    vid, os, browser, standalone, at: serverTimestamp()
+  }).catch(()=>{});
+
+  /* 2) 일별 통계 */
+  setDoc(doc(db,'stats_daily',todayKey),{
+    date: todayKey,
+    visits: increment(1),
+    ['os_'+os]: increment(1),
+    ['br_'+browser]: increment(1),
+    new_visitors: increment(isNewVisitor?1:0),
+    standalone_opens: increment(standalone?1:0)
+  },{merge:true}).catch(()=>{});
+
+  /* 3) 순 방문자 */
+  setDoc(doc(db,'visitors',vid),{
+    vid, lastOS: os, lastBrowser: browser,
+    lastSeen: serverTimestamp(), visits: increment(1)
+  },{merge:true}).catch(()=>{});
+
+  /* 4) 설치 이벤트 */
+  window.addEventListener('appinstalled',()=>{
+    addDoc(collection(db,'installs'),{vid,os,browser,at:serverTimestamp()}).catch(()=>{});
+    setDoc(doc(db,'stats_daily',todayKey),{install_events:increment(1)},{merge:true}).catch(()=>{});
+  });
+
+  /* 관리자 메시지 클라우드 저장 (앱 본체에서 호출) */
+  window.__saveContactToCloud = (payload)=>addDoc(collection(db,'messages'),{
+    ...payload, os, browser, at: serverTimestamp(), read:false
+  });
+}catch(e){ /* Firebase 로딩 실패 시 통계만 비활성, 앱은 정상 작동 */ }
 </script>
 </body>
 </html>
