@@ -510,6 +510,8 @@ function setBgmVol(v){bgmGain.gain.value=v;}
 
 async function playPad(pad,padEl){
   await ensureCtx();
+  // 전체 정지 페이드 진행 중에 새로 재생하면: 남은 소리를 정리하고 새로 시작
+  if(fadingOut)panic();
   const buf=await getBuffer(pad.audioId);
   if(buf&&(!pad.dur||pad.dur===0)){pad.dur=buf.duration;saveSet();}
   if(!buf){toast('음원을 찾을 수 없습니다');return;}
@@ -593,6 +595,12 @@ function panic(){
   activeSFX.forEach(o=>{try{o.src.stop()}catch(e){}});activeSFX.clear();
   refreshBgmBar();paintPlaying();
   document.querySelectorAll('.pad .progress').forEach(p=>p.style.width='0');
+}
+/* 특정 패드에 묶인 소리만 정리 (패드 비우기·음원 교체 시) */
+function stopPadSound(pad){
+  if(!pad)return;
+  if(currentBGM&&currentBGM.padId===pad.id){try{currentBGM.src.stop()}catch(e){}currentBGM=null;refreshBgmBar();paintPlaying();}
+  activeSFX.forEach(o=>{if(o.padId===pad.id){try{o.src.stop()}catch(e){}}});
 }
 function flashPad(el,dur){
   if(!el)return;el.classList.add('playing');
@@ -1135,6 +1143,7 @@ async function recordMic(){
 /* ---- 패드 할당 후 편집으로 ---- */
 async function assignPad(idx,audioId,name){
   const s=activeSet();
+  stopPadSound(s.pads[idx]); // 기존 패드가 재생 중이면 소리 정리
   let dur=0;
   try{const buf=await getBuffer(audioId);if(buf)dur=buf.duration;}catch(e){}
   s.pads[idx]={id:uid(),audioId,name,type:'sfx',icon:'🎵',color:'#f59e0b',vol:1,loop:true,fade:1,retap:'overlap',dur,fontScale:1};
@@ -1273,6 +1282,7 @@ function openPadEditor(idx,isNew){
     await saveSet();renderGrid();closeOverlays();toast('저장되었습니다');
   };
   sheet.querySelector('#padClear').onclick=async()=>{
+    stopPadSound(pad); // 재생 중이면 소리부터 정리
     if(pad.audioId)await dbDel('audio',pad.audioId).catch(()=>{});
     activeSet().pads[idx]=null;await saveSet();renderGrid();closeOverlays();toast('패드를 비웠습니다');
   };
@@ -1377,6 +1387,7 @@ async function setupTrim(sheet,pad){
     if(!ok)return;
     btnApply.disabled=true;btnApply.textContent='자르는 중…';
     try{
+      stopPadSound(pad); // 재생 중이면 정리 후 교체
       const trimmed=sliceBuffer(buf,selStart,selEnd);
       const wav=encodeWAV(trimmed);
       const newId=uid();await dbPut('audio',{id:newId,data:wav});
@@ -1436,6 +1447,7 @@ async function renameSet(){const s=activeSet();const name=prompt('세트 이름'
 async function delSet(){
   if(state.sets.length<=1){toast('마지막 세트는 삭제할 수 없습니다');return;}
   const s=activeSet();if(!confirm(`"${s.name}" 세트를 삭제할까요? 음원도 함께 지워집니다.`))return;
+  panic(); // 재생 중인 소리 정리
   for(const p of s.pads)if(p&&p.audioId)await dbDel('audio',p.audioId).catch(()=>{});
   await dbDel('sets',s.id);state.sets=state.sets.filter(x=>x.id!==s.id);
   state.activeSetId=state.sets[0].id;await metaSet('activeSet',state.activeSetId);render();toast('세트를 삭제했습니다');
@@ -1501,6 +1513,7 @@ document.getElementById('setImporter').onchange=async e=>{
     s.id=uid();s.name=(s.name||'가져온 세트');
     s.pads=s.pads.map(p=>{if(p&&p.audioId&&idMap[p.audioId])p.audioId=idMap[p.audioId];return p;});
     state.sets.push(s);await dbPut('sets',s);
+    panic(); // 이전 세트 소리가 남지 않도록 정리
     state.activeSetId=s.id;await metaSet('activeSet',s.id);render();toast('세트를 불러왔습니다');
   }catch(err){toast('파일을 읽을 수 없습니다');}
 };
