@@ -464,7 +464,7 @@
 
 <script>
 /* ===== 앱 버전 (문제 추적용) ===== */
-const APP_VER='2.2';
+const APP_VER='2.4';
 /* ===== 설정: 관리자 이메일 (여기만 바꾸면 됩니다) ===== */
 const ADMIN_EMAIL='artist4rhythm@gmail.com';  // 관리자 이메일
 
@@ -480,6 +480,17 @@ try{
   };
 }catch(e){}
 function claimAudio(){try{if(__bc)__bc.postMessage('takeover');}catch(e){}}
+
+/* ===== iOS 유령 재생 방지 =====
+   아이폰·아이패드는 앱을 닫아도 '잠들' 뿐이라, 다시 열면 재생 상태가 되살아남.
+   화면에서 사라지는 순간 소리를 정지시켜 복귀 시 유령 BGM을 차단. */
+const IS_IOS=/iPhone|iPad|iPod/.test(navigator.userAgent)
+  ||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1); // 아이패드 데스크톱 모드
+window.addEventListener('pagehide',()=>{try{panic();}catch(e){}});
+window.addEventListener('pageshow',e=>{if(e.persisted){try{panic();}catch(_){}}});
+document.addEventListener('visibilitychange',()=>{
+  if(IS_IOS&&document.visibilityState==='hidden'){try{panic();}catch(e){}}
+});
 
 /* ===== 전역 오류를 화면에 표시 (숨은 오류 추적용) ===== */
 window.addEventListener('error',e=>{
@@ -547,9 +558,11 @@ async function playPad(pad,padEl){
     const fadeOut=pad.fadeOut??pad.fade??1;
     if(currentBGM)stopBGM(); // 이전 곡은 자기 페이드아웃 값으로 사라짐
     const src=ac.createBufferSource();src.buffer=buf;src.loop=pad.loop!==false;
+    let lpA=null,lpB=null;
     // 구간 반복(A-B 루프): 처음부터 재생하다 B에 닿으면 A로 돌아가 반복
     if(src.loop&&pad.loopA!=null&&pad.loopB!=null&&pad.loopB>pad.loopA+0.05){
       src.loopStart=Math.max(0,pad.loopA);src.loopEnd=Math.min(pad.loopB,buf.duration);
+      lpA=src.loopStart;lpB=src.loopEnd;
     }
     const g=ac.createGain();
     const an=ac.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.5;
@@ -557,7 +570,7 @@ async function playPad(pad,padEl){
     src.start();
     if(fadeIn>0){g.gain.value=0;g.gain.linearRampToValueAtTime(pad.vol??1,ac.currentTime+fadeIn);}
     else{g.gain.value=pad.vol??1;}
-    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fadeOut,analyser:an,startAt:ac.currentTime,dur:buf.duration,loop:src.loop};
+    currentBGM={padId:pad.id,src,gain:g,name:pad.name,fadeOut,analyser:an,startAt:ac.currentTime,dur:buf.duration,loop:src.loop,loopA:lpA,loopB:lpB};
     src.onended=()=>{if(currentBGM&&currentBGM.src===src){currentBGM=null;refreshBgmBar();paintPlaying();}};
     refreshBgmBar();paintPlaying();
   }else{
@@ -947,8 +960,13 @@ function updatePadMeters(){
       const rt=el.querySelector('.runtime');
       if(rt&&runObj){
         let elapsed=ac.currentTime-runObj.startAt;
-        if(runObj.loop&&runObj.dur)elapsed=elapsed%runObj.dur;
-        rt.textContent=fmtDur(Math.max(0,elapsed));
+        if(runObj.loopA!=null&&runObj.loopB!=null&&elapsed>runObj.loopB){
+          // A-B 구간 반복 중: 실제 위치 계산
+          elapsed=runObj.loopA+((elapsed-runObj.loopA)%(runObj.loopB-runObj.loopA));
+        }else if(runObj.loop&&runObj.dur){
+          elapsed=elapsed%runObj.dur;
+        }
+        rt.textContent=fmtDur(Math.max(0,elapsed))+(runObj.dur?' / '+fmtDur(runObj.dur):'');
       }
     }else{
       el.classList.remove('metering');padMeterLvl[idx]=0;
@@ -1478,8 +1496,9 @@ async function delSet(){
   state.activeSetId=state.sets[0].id;await metaSet('activeSet',state.activeSetId);render();toast('세트를 삭제했습니다');
 }
 /* 내보내기: 음원을 base64로 묶어 단일 json */
-async function buildSetFile(){
-  const s=activeSet();
+async function buildSetFile(customName){
+  const s0=activeSet();
+  const s=customName?{...s0,name:customName}:s0; // 지정한 이름을 세트 이름으로 기록
   const audioMap={};
   for(const p of s.pads){if(p&&p.audioId&&!audioMap[p.audioId]){
     const rec=await dbGet('audio',p.audioId);if(rec)audioMap[p.audioId]=abToB64(rec.data);}}
@@ -1500,7 +1519,7 @@ document.getElementById('expGo').onclick=async ()=>{
   const base=(raw||activeSet().name||'set').replace(/[^\w가-힣 ._-]/g,'');
   if(!base){toast('파일 이름을 입력해주세요');return;}
   closeOverlays();toast('내보내기 준비 중…');
-  const {json}=await buildSetFile();
+  const {json}=await buildSetFile(base);
   const blob=new Blob([json],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   a.href=url;a.download=base+'.cuepad.json';a.click();
@@ -1535,7 +1554,10 @@ document.getElementById('setImporter').onchange=async e=>{
     const s=pkg.set;const idMap={};
     for(const oldId in pkg.audio){const newId=uid();idMap[oldId]=newId;
       await dbPut('audio',{id:newId,data:b64ToAb(pkg.audio[oldId])});}
-    s.id=uid();s.name=(s.name||'가져온 세트');
+    s.id=uid();
+    // 세트 이름이 비어있으면 파일 이름에서 가져옴
+    const fromFile=f.name.replace(/\.cuepad\.json$|\.json$/i,'').trim();
+    s.name=(s.name&&s.name.trim())||fromFile||'가져온 세트';
     s.pads=s.pads.map(p=>{if(p&&p.audioId&&idMap[p.audioId])p.audioId=idMap[p.audioId];return p;});
     state.sets.push(s);await dbPut('sets',s);
     panic(); // 이전 세트 소리가 남지 않도록 정리
